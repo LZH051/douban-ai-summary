@@ -1,15 +1,19 @@
 # 豆瓣电影 Top250 数据分析与 AI 摘要工具（SQLite 版）
 
-这是项目 B 的独立 SQLite 版本。数据库保存在
-`database/douban_ai.db`，不需要安装或启动 MySQL/Wampserver。
+本项目使用 `requests + BeautifulSoup` 低频采集豆瓣电影 Top250 数据，
+经过清洗和去重后写入 SQLite，并为部分电影生成 AI 摘要。数据库位于
+`database/douban_ai.db`，无需安装或启动数据库服务器。
 
 ## 功能
 
-- 使用 `requests + BeautifulSoup` 低频采集电影信息
-- 清洗非法字段、空简介和重复电影
-- 使用 SQLite 唯一约束与 `INSERT OR IGNORE` 防止重复入库
-- 可生成5～10条 AI 摘要
-- 可将 MySQL 版本已生成的摘要 CSV 导入 SQLite，避免重复付费
+- 采集电影标题、评分、评价人数、简介和来源链接
+- 多页采集时随机等待2～5秒
+- 遇到403、418或429时停止，不进行高频重试
+- 清洗缺失字段、非法数据和重复电影
+- 使用 SQLite 保存电影和 AI 摘要
+- 使用唯一约束和 `INSERT OR IGNORE` 防止重复入库
+- 支持生成5～10条 AI 摘要
+- 支持导入现有摘要 CSV，不重复调用付费接口
 
 ## 安装
 
@@ -33,6 +37,7 @@ python src\load_database.py
 python src\import_ai_summaries.py
 python src\verify_project.py --expected-min 20 --require-ai
 ```
+第二次运行 `load_database.py` 应显示新增0条、跳过25条。
 
 `import_ai_summaries.py` 只导入现有 CSV，不会调用 API。
 
