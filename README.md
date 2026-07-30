@@ -28,18 +28,16 @@ Copy-Item .env.example .env
 
 SQLite 驱动属于 Python 标准库，无需另外安装。
 
-## 使用现有数据完成入库
+## 数据清洗、入库与验收
 
 ```powershell
 python src\cleaner.py
 python src\load_database.py
 python src\load_database.py
-python src\import_ai_summaries.py
 python src\verify_project.py --expected-min 20 --require-ai
 ```
 第二次运行 `load_database.py` 应显示新增0条、跳过25条。
 
-`import_ai_summaries.py` 只导入现有 CSV，不会调用 API。
 
 ## 重新采集一页
 
