@@ -5,8 +5,6 @@
 ## 在线体验
 
 - 网站首页：<https://douban-ai-summary.vercel.app/>
-- 电影库：<https://douban-ai-summary.vercel.app/movies>
-- 健康检查：<https://douban-ai-summary.vercel.app/health>
 
 ## 当前数据
 
