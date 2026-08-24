@@ -1,103 +1,195 @@
-# 豆瓣电影 Top250 数据分析与 AI 摘要工具（SQLite 版）
+# 光影智选｜豆瓣电影 Top250 AI 摘要与正版观看导航
 
-这是项目 B 的独立 SQLite 版本。数据库保存在
-`database/douban_ai.db`，不需要安装或启动 MySQL/Wampserver。
+光影智选是一个基于 FastAPI 的电影信息网站，提供豆瓣电影 Top250 浏览、评分筛选、AI 摘要、用户收藏和正版视频平台搜索入口。
 
-## 功能
+## 在线体验
+
+- 网站首页：<https://douban-ai-summary.vercel.app/>
+- 电影库：<https://douban-ai-summary.vercel.app/movies>
+- 健康检查：<https://douban-ai-summary.vercel.app/health>
+
+## 当前数据
+
+- 电影：250 部
+- 已有 AI 摘要：5 条
+- 列表分页：每页 12 部，共 21 页
+- 数据库存储：本地使用 SQLite，公网使用 Neon PostgreSQL
+
+AI 摘要保存在数据库中，普通用户浏览时不会重复调用 AI 接口。没有摘要的电影会显示“暂时还没有 AI 摘要”。
+
+## 主要功能
+
+### 公网网站
+
+- 用户注册、登录和退出
+- 按电影名称搜索
+- 按最低评分筛选
+- 电影列表分页与首尾页跳转
+- 查看评分、评价人数、简介和资料来源
+- 阅读已保存的 AI 摘要
+- 收藏或取消收藏电影
+- 跳转到爱奇艺、腾讯视频、优酷和哔哩哔哩搜索电影
+- 管理员维护确定的正版播放页面链接
+
+### 数据处理工具
 
 - 使用 `requests + BeautifulSoup` 低频采集电影信息
-- 清洗非法字段、空简介和重复电影
-- 解析异常写入 `output/scraping_errors.csv`
-- 使用 Upsert 新增电影并更新已有电影的最新数据
-- 支持手动录入、标题搜索、评分筛选和数据统计
-- 可选择指定电影生成AI摘要；单次限制1～10条
-- AI调用必须明确确认，客户端关闭自动重试并设置30秒超时
-- 可将已有摘要CSV导入SQLite，避免重复付费
+- 清洗空字段、非法值和重复电影
+- 使用 Upsert 更新已有电影，避免重复入库
+- 支持命令行查询、统计和手动录入
+- AI 摘要单次限制 1～10 条，并要求显式确认付费调用
 
-## 安装
+## 技术栈
+
+- 后端：Python、FastAPI、SQLAlchemy
+- 页面：Jinja2、HTML、CSS
+- 本地数据库：SQLite
+- 公网数据库：Neon PostgreSQL
+- 部署：Vercel
+- 数据采集：Requests、BeautifulSoup
+- AI 接口：OpenAI 兼容接口／火山方舟
+
+## 项目结构
+
+```text
+api/                 Vercel FastAPI 入口
+src/                 后端、数据处理和导入脚本
+static/              黄黑主题样式
+templates/           页面模板
+data/                原始和清洗后的电影 CSV
+output/              AI 摘要、清洗报告和采集异常
+database/            SQLite 建表脚本；本地 .db 不提交 GitHub
+tests/               网页冒烟测试
+```
+
+## 本地安装
+
+Windows PowerShell：
 
 ```powershell
 cd E:\douban-ai-summary-sqlite
 python -m venv .venv
-Set-ExecutionPolicy -Scope Process Bypass
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-SQLite驱动属于Python标准库，无需另外安装。
+不需要激活虚拟环境，可以直接使用 `.venv` 内的 Python，避免 PowerShell 执行策略拦截 `Activate.ps1`。
 
-## 数据清洗、入库与验收
+## 环境变量
 
-使用已经采集的数据进行离线演示：
+编辑本地 `.env`：
 
-```powershell
-python src\cleaner.py
-python src\load_database.py
-python src\load_database.py
-python src\verify_project.py --expected-min 20 --require-ai
+```env
+# AI 摘要功能，可选
+AI_API_KEY=
+AI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+AI_MODEL=doubao-seed-2-0-lite-260428
+
+# 网页功能
+DATABASE_URL=
+SESSION_SECRET=
+ADMIN_EMAILS=
 ```
 
-第二次运行 `load_database.py` 应显示新增0条、更新已有电影，证明
-Upsert不会创建重复记录。`--require-ai` 只检查已有摘要，不调用API。
+说明：
 
-## 交互模式
+- 本地不填写 `DATABASE_URL` 时，网页默认使用 `database/douban_ai.db`。
+- 公网部署必须设置 `DATABASE_URL` 和 `SESSION_SECRET`。
+- `ADMIN_EMAILS` 可选，用于指定能够维护正版链接的管理员邮箱。
+- `.env`、数据库文件和密钥禁止提交到 GitHub。
 
-```powershell
-python src\main.py --interactive
-```
-
-可执行：
-
-1. 手动添加或更新电影
-2. 按标题关键词搜索
-3. 按最低评分筛选
-4. 查看电影总数、平均分、最高分和摘要数量
-5. 选择指定电影生成AI摘要
-6. 查看已有AI摘要
-
-只有第5项在输入 `yes` 后才可能调用AI接口，其他操作均为本地SQLite操作。
-
-## 重新低频采集
+## 本地运行网站
 
 ```powershell
-python src\main.py --pages 1
+.\.venv\Scripts\python.exe -m uvicorn web_app:app --app-dir src --reload
 ```
 
-多页采集时每页随机等待2～5秒；遇到403、418或429立即停止，不连续重试。
-无法解析的电影节点会记录到：
+浏览器打开：<http://127.0.0.1:8000>
+
+## 数据采集、清洗和入库
+
+默认只低频采集一页：
+
+```powershell
+.\.venv\Scripts\python.exe src\main.py --pages 1
+```
+
+采集完整 Top250：
+
+```powershell
+.\.venv\Scripts\python.exe src\main.py --pages 10
+```
+
+保护措施：
+
+- 页数限制为 1～10 页
+- 每页随机等待 2～5 秒
+- 请求超时为 20 秒
+- 遇到 403、418 或 429 时立即停止，不连续重试
+- 采集流程不会自动调用 AI
+
+单独执行清洗、入库和验收：
+
+```powershell
+.\.venv\Scripts\python.exe src\cleaner.py
+.\.venv\Scripts\python.exe src\load_database.py
+.\.venv\Scripts\python.exe src\verify_project.py --expected-min 250 --require-ai
+```
+
+## AI 摘要
+
+只有明确接受接口费用后才执行：
+
+```powershell
+.\.venv\Scripts\python.exe src\ai_summary.py --limit 5 --confirm-paid-run
+```
+
+程序只选择尚未生成摘要的电影。每部电影的摘要保存在数据库中，后续用户浏览不会重复收费。
+
+## 导入 Neon PostgreSQL
+
+在本地 `.env` 中配置 Neon 直连字符串后执行：
+
+```powershell
+.\.venv\Scripts\python.exe src\import_web_data.py --confirm-import
+```
+
+该脚本将 250 部电影和已有 AI 摘要导入网页数据库，支持重复运行，不会调用 AI。
+
+## Vercel 部署
+
+1. 将代码上传到 GitHub，但不要上传 `.env`、`.db`、虚拟环境或日志。
+2. 在 Vercel 导入 GitHub 仓库，预设选择 FastAPI，根目录保持 `./`。
+3. 在 Vercel 设置环境变量：
 
 ```text
-E:\douban-ai-summary-sqlite\output\scraping_errors.csv
+DATABASE_URL=Neon 的 pooler 连接字符串
+SESSION_SECRET=随机长字符串
+ADMIN_EMAILS=管理员注册邮箱（可选）
 ```
 
-## 批量新增AI摘要
+4. 点击 Deploy，并访问 `/health`、`/movies` 和 `/register` 验证部署。
 
-只有明确接受接口费用后才运行：
+## 测试
 
 ```powershell
-python src\ai_summary.py --limit 5 --confirm-paid-run
+.\.venv\Scripts\python.exe tests\web_smoke_test.py
 ```
 
-数据库文件可用DB Browser for SQLite打开：
+预期输出：
 
 ```text
-E:\douban-ai-summary-sqlite\database\douban_ai.db
+WEB_SMOKE_TEST=PASS
 ```
 
-`.env`、`.db` 和虚拟环境均已加入 `.gitignore`。
-## 网页版本
+## 隐私与版权说明
 
-网页提供电影搜索、评分筛选、AI摘要、用户收藏与正版观看入口。
-正版观看按钮只跳转到管理员录入的第三方正版播放页，网站不存储视频。
+- 网站不保存、上传或分发电影视频文件。
+- 正版平台按钮用于跳转到第三方平台官网搜索，或者跳转到管理员录入的确定播放页。
+- 搜索结果不代表相应平台一定拥有该电影版权，片源、会员和付费规则以平台官网为准。
+- 用户密码采用带随机盐的 scrypt 哈希保存，不保存明文密码。
+- 用户账户和收藏数据存储在数据库中，不应提交到公开代码仓库。
 
-```powershell
-python -m pip install -r requirements.txt
-python -m uvicorn web_app:app --app-dir src --reload
-```
+## 项目用途
 
-浏览器打开：`http://127.0.0.1:8000`。
-
-本地默认继续使用 `database/douban_ai.db`。部署时设置 `DATABASE_URL`
-可切换到 PostgreSQL，并且必须设置随机的 `SESSION_SECRET`。需要维护正版
-观看链接时，将管理员邮箱写入 `ADMIN_EMAILS`；多个邮箱使用英文逗号分隔。
+本项目用于学习 Python 数据采集、ETL、SQLite/PostgreSQL、FastAPI、多用户网站开发和云端部署。
