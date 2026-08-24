@@ -32,21 +32,32 @@ def build_prompt(movie: dict) -> str:
 """
 
 
-def fetch_unsummarized_movies(limit: int) -> list[dict]:
+def fetch_unsummarized_movies(
+    limit: int,
+    movie_ids: list[int] | None = None,
+) -> list[dict]:
+    where = "WHERE s.summary_id IS NULL"
+    parameters: list[int] = []
+    if movie_ids:
+        placeholders = ", ".join("?" for _ in movie_ids)
+        where += f" AND m.movie_id IN ({placeholders})"
+        parameters.extend(movie_ids)
+    parameters.append(limit)
+
     connection = connect_to_database()
     try:
         cursor = connection.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT m.movie_id, m.title, m.rating,
                    m.rating_count, m.introduction
             FROM movies AS m
             LEFT JOIN ai_summaries AS s ON s.movie_id = m.movie_id
-            WHERE s.summary_id IS NULL
+            {where}
             ORDER BY m.rating DESC, m.rating_count DESC
             LIMIT ?
             """,
-            (limit,),
+            parameters,
         )
         return [dict(row) for row in cursor.fetchall()]
     finally:
@@ -57,16 +68,17 @@ def export_summaries() -> None:
     ensure_directories()
     connection = connect_to_database()
     try:
-        cursor = connection.cursor()
-        cursor.execute(
-            """
-            SELECT m.title, s.summary, s.model_name, s.created_at
-            FROM ai_summaries AS s
-            JOIN movies AS m ON m.movie_id = s.movie_id
-            ORDER BY s.summary_id
-            """
-        )
-        rows = [dict(row) for row in cursor.fetchall()]
+        rows = [
+            dict(row)
+            for row in connection.execute(
+                """
+                SELECT m.title, s.summary, s.model_name, s.created_at
+                FROM ai_summaries AS s
+                JOIN movies AS m ON m.movie_id = s.movie_id
+                ORDER BY s.summary_id
+                """
+            ).fetchall()
+        ]
     finally:
         connection.close()
 
@@ -79,19 +91,31 @@ def export_summaries() -> None:
         writer.writerows(rows)
 
 
-def generate_ai_summaries(limit: int = 5) -> int:
-    if not 5 <= limit <= 10:
-        raise ValueError("AI 摘要样本数必须在5～10之间")
-    api_key, base_url, model = get_ai_config()
-    from openai import OpenAI
+def generate_ai_summaries(
+    limit: int = 5,
+    confirm_paid_run: bool = False,
+    movie_ids: list[int] | None = None,
+) -> int:
+    if not confirm_paid_run:
+        raise RuntimeError("AI 调用可能产生费用，尚未获得明确确认。")
+    if not 1 <= limit <= 10:
+        raise ValueError("单次 AI 摘要数量必须在1～10之间")
 
-    movies = fetch_unsummarized_movies(limit)
+    movies = fetch_unsummarized_movies(limit, movie_ids)
     if not movies:
         print("没有待生成摘要的电影")
         export_summaries()
         return 0
 
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    api_key, base_url, model = get_ai_config()
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        max_retries=0,
+        timeout=30.0,
+    )
     generated_count = 0
     for index, movie in enumerate(movies, start=1):
         print(f"生成摘要 {index}/{len(movies)}：{movie['title']}")
@@ -106,20 +130,22 @@ def generate_ai_summaries(limit: int = 5) -> int:
         summary = (response.choices[0].message.content or "").strip()
         if not summary:
             raise RuntimeError(f"模型没有返回摘要：{movie['title']}")
+
         connection = connect_to_database()
         try:
-            cursor = connection.cursor()
-            cursor.execute(
+            cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO ai_summaries (
                     movie_id, summary, model_name
-                )
-                VALUES (?, ?, ?)
+                ) VALUES (?, ?, ?)
                 """,
                 (movie["movie_id"], summary, model),
             )
             connection.commit()
             generated_count += cursor.rowcount
+        except Exception:
+            connection.rollback()
+            raise
         finally:
             connection.close()
 
@@ -130,12 +156,12 @@ def generate_ai_summaries(limit: int = 5) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="生成电影 AI 摘要")
-    parser.add_argument("--limit", type=int, choices=range(5, 11), default=5)
+    parser.add_argument("--limit", type=int, choices=range(1, 11), default=5)
     parser.add_argument("--confirm-paid-run", action="store_true")
     args = parser.parse_args()
     if not args.confirm_paid_run:
         raise SystemExit("AI 调用可能产生费用，请添加 --confirm-paid-run。")
-    generate_ai_summaries(args.limit)
+    generate_ai_summaries(args.limit, confirm_paid_run=True)
 
 
 if __name__ == "__main__":
