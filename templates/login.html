@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}登录｜光影智选{% endblock %}
+{% block content %}<section class="auth-wrap"><div class="auth-card"><p class="eyebrow">欢迎回来</p><h1>登录光影智选</h1><p>继续浏览电影和管理个人收藏。</p>{% if error %}<div class="error-list"><p>{{ error }}</p></div>{% endif %}<form method="post"><input type="hidden" name="csrf" value="{{ csrf_token }}"><label>邮箱<input type="email" name="email" required></label><label>密码<input type="password" name="password" required></label><button class="button full" type="submit">登录</button></form><p class="auth-foot">还没有账户？<a href="/register">免费注册</a></p></div></section>{% endblock %}

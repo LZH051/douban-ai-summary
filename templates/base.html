@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="电影信息、AI摘要、个人收藏与正版观看入口">
+    <title>{% block title %}光影智选{% endblock %}</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}?v=20260824-4">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="/"><span class="brand-mark">影</span>光影智选</a>
+        <nav>
+            <a href="/movies">电影库</a>
+            {% if current_user %}
+                <a href="/favorites">我的收藏</a>
+                <span class="user-name">{{ current_user.username }}</span>
+                <form class="inline" method="post" action="/logout">
+                    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                    <button class="nav-button" type="submit">退出</button>
+                </form>
+            {% else %}
+                <a href="/login">登录</a>
+                <a class="button small" href="/register">免费注册</a>
+            {% endif %}
+        </nav>
+    </header>
+    {% if messages %}
+    <section class="flash-stack">
+        {% for message in messages %}<div class="flash {{ message.kind }}">{{ message.text }}</div>{% endfor %}
+    </section>
+    {% endif %}
+    <main>{% block content %}{% endblock %}</main>
+    <footer><strong>光影智选</strong><span>只提供电影信息与正版平台跳转，不存储电影视频。</span></footer>
+</body>
+</html>

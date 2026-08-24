@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ movie.title }}｜光影智选{% endblock %}
+{% block content %}
+<section class="page-width detail-hero">
+    <div class="detail-cover"><span>{{ movie.title[:1] }}</span><b>{{ "%.1f"|format(movie.rating) }}</b></div>
+    <div class="detail-main"><a class="back" href="/movies">← 返回电影库</a><h1>{{ movie.title }}</h1><div class="detail-meta"><span class="rating">★ {{ "%.1f"|format(movie.rating) }}</span><span>{{ movie.rating_count }} 人评价</span><span>豆瓣 ID {{ movie.douban_id }}</span></div><p>{{ movie.introduction }}</p><div class="actions">
+        {% if current_user %}<form method="post" action="/movies/{{ movie.movie_id }}/favorite"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="button {{ 'secondary' if favorite }}" type="submit">{{ '取消收藏' if favorite else '加入收藏' }}</button></form>{% else %}<a class="button" href="/login">登录后收藏</a>{% endif %}
+        <a class="button secondary" href="{{ movie.source_url }}" target="_blank" rel="noopener noreferrer">查看资料来源</a>
+    </div></div>
+</section>
+<section class="page-width detail-grid">
+    <article class="content-card"><p class="eyebrow">AI 智能摘要</p><h2>快速了解这部电影</h2>{% if movie.ai_summary %}<p class="summary">{{ movie.ai_summary.summary }}</p><small>由 {{ movie.ai_summary.model_name }} 生成，仅供辅助了解。</small>{% else %}<div class="empty compact"><p>这部电影暂时还没有 AI 摘要。</p></div>{% endif %}</article>
+    <aside class="content-card watch-card"><p class="eyebrow">正版观看</p><h2>选择观看平台</h2><p class="muted">点击后将前往第三方正版平台，会员和付费规则以平台页面为准。</p>
+        {% if movie.watch_links %}<div class="watch-list">{% for link in movie.watch_links %}<div class="watch-row"><a class="watch-button" href="{{ link.watch_url }}" target="_blank" rel="noopener noreferrer">前往{{ link.platform_name }}观看 ↗</a>{% if is_admin %}<form method="post" action="/watch-links/{{ link.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="delete-link" type="submit">删除</button></form>{% endif %}</div>{% endfor %}</div>{% else %}<div class="watch-search">
+            <p>暂未确认具体播放页，可先前往正版平台官网搜索：</p>
+            <div class="watch-list">
+                <a class="watch-button" href="https://www.iqiyi.com/so/q_{{ movie.title|urlencode }}" target="_blank" rel="noopener noreferrer">在爱奇艺搜索“{{ movie.title }}” ↗</a>
+                <a class="watch-button" href="https://v.qq.com/x/search/?q={{ movie.title|urlencode }}" target="_blank" rel="noopener noreferrer">在腾讯视频搜索“{{ movie.title }}” ↗</a>
+                <a class="watch-button" href="https://so.youku.com/search_video/q_{{ movie.title|urlencode }}" target="_blank" rel="noopener noreferrer">在优酷搜索“{{ movie.title }}” ↗</a>
+                <a class="watch-button" href="https://search.bilibili.com/all?keyword={{ movie.title|urlencode }}" target="_blank" rel="noopener noreferrer">在哔哩哔哩搜索“{{ movie.title }}” ↗</a>
+            </div>
+            <small>搜索结果不代表平台一定拥有该电影版权，实际片源和付费规则以平台官网为准。</small>
+        </div>{% endif %}
+        {% if is_admin %}<form class="admin-form" method="post" action="/movies/{{ movie.movie_id }}/watch-links"><h3>管理员维护链接</h3><input type="hidden" name="csrf" value="{{ csrf_token }}"><label>平台<select name="platform_name" required>{% for platform in platforms %}<option>{{ platform }}</option>{% endfor %}</select></label><label>具体正版播放页<input type="url" name="watch_url" placeholder="https://..." required></label><button class="button" type="submit">保存链接</button></form>{% endif %}
+    </aside>
+</section>
+{% endblock %}

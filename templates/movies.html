@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}电影库｜光影智选{% endblock %}
+{% block content %}
+<section class="page-width page-head"><p class="eyebrow">探索电影</p><h1>电影库</h1><p>按标题搜索，或筛选最低评分。</p></section>
+<section class="page-width search-panel">
+    <form method="get" action="/movies">
+        <label>电影名称<input name="q" value="{{ q }}" placeholder="输入电影标题"></label>
+        <label>最低评分<select name="min_rating">
+            <option value="0">全部评分</option>
+            {% for score in [9.5, 9, 8.5, 8] %}<option value="{{ score }}" {% if min_rating == score %}selected{% endif %}>{{ score }} 分以上</option>{% endfor %}
+        </select></label>
+        <button class="button" type="submit">搜索</button>
+    </form>
+</section>
+<section class="page-width section">
+    <div class="result-line">找到 <strong>{{ total }}</strong> 部电影{% if total %}，正在显示第 {{ (page - 1) * 12 + 1 }}～{{ (page - 1) * 12 + movies|length }} 部{% endif %}</div>
+    {% if movies %}<div class="movie-grid">
+        {% for movie in movies %}
+        <article class="movie-card"><div class="movie-cover"><span>{{ movie.title[:1] }}</span><b>{{ "%.1f"|format(movie.rating) }}</b></div><div class="movie-card-body"><h3><a href="/movies/{{ movie.movie_id }}">{{ movie.title }}</a></h3><p>{{ movie.introduction[:72] }}{% if movie.introduction|length > 72 %}…{% endif %}</p><div class="meta"><span>{{ movie.rating_count }} 人评价</span><span>{{ "AI 摘要" if movie.ai_summary else "基础资料" }}</span></div></div></article>
+        {% endfor %}
+    </div>
+    {% if total_pages > 1 %}<nav class="pagination" aria-label="电影列表分页">
+        {% if page > 1 %}<a href="/movies?q={{ q|urlencode }}&min_rating={{ min_rating }}&page={{ page - 1 }}">← 上一页</a>{% else %}<span class="disabled">← 上一页</span>{% endif %}
+        {% if page_numbers|first > 1 %}<a href="/movies?q={{ q|urlencode }}&min_rating={{ min_rating }}&page=1">1</a>{% if page_numbers|first > 2 %}<span class="ellipsis">…</span>{% endif %}{% endif %}
+        {% for number in page_numbers %}<a class="{{ 'current' if number == page }}" href="/movies?q={{ q|urlencode }}&min_rating={{ min_rating }}&page={{ number }}">{{ number }}</a>{% endfor %}
+        {% if page_numbers|last < total_pages %}{% if page_numbers|last < total_pages - 1 %}<span class="ellipsis">…</span>{% endif %}<a href="/movies?q={{ q|urlencode }}&min_rating={{ min_rating }}&page={{ total_pages }}">{{ total_pages }}</a>{% endif %}
+        {% if page < total_pages %}<a href="/movies?q={{ q|urlencode }}&min_rating={{ min_rating }}&page={{ page + 1 }}">下一页 →</a>{% else %}<span class="disabled">下一页 →</span>{% endif %}
+    </nav>{% endif %}
+    {% else %}<div class="empty"><h2>没有找到符合条件的电影</h2><p>尝试缩短关键词或降低评分条件。</p></div>{% endif %}
+</section>
+{% endblock %}

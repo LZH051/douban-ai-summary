@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}光影智选｜发现值得看的电影{% endblock %}
+{% block content %}
+<section class="hero page-width">
+    <div>
+        <p class="eyebrow">电影信息 · AI 摘要 · 正版入口</p>
+        <h1>找到值得看的电影，<em>从一段可靠的介绍开始。</em></h1>
+        <p class="hero-copy">搜索高分电影、阅读智能摘要、保存个人收藏，并从详情页前往已核验的正版观看平台。</p>
+        <div class="actions"><a class="button" href="/movies">浏览电影库</a>{% if not current_user %}<a class="button secondary" href="/register">创建收藏夹</a>{% endif %}</div>
+        <div class="trust"><span>✓ 不提供盗版资源</span><span>✓ AI 摘要明确标识</span><span>✓ 正版链接人工维护</span></div>
+    </div>
+    <aside class="hero-card">
+        <span class="hero-card-label">今日推荐</span>
+        {% if movies %}
+        <div class="score">{{ "%.1f"|format(movies[0].rating) }}</div>
+        <h2>{{ movies[0].title }}</h2>
+        <p>{{ movies[0].introduction[:90] }}{% if movies[0].introduction|length > 90 %}…{% endif %}</p>
+        <a href="/movies/{{ movies[0].movie_id }}">查看电影详情 →</a>
+        {% else %}<h2>等待导入电影数据</h2>{% endif %}
+    </aside>
+</section>
+<section class="page-width section">
+    <div class="section-heading"><div><p class="eyebrow">高分精选</p><h2>从电影库开始探索</h2></div><a href="/movies">查看全部 →</a></div>
+    <div class="movie-grid">
+        {% for movie in movies %}
+        <article class="movie-card">
+            <div class="movie-cover"><span>{{ movie.title[:1] }}</span><b>{{ "%.1f"|format(movie.rating) }}</b></div>
+            <div class="movie-card-body"><h3><a href="/movies/{{ movie.movie_id }}">{{ movie.title }}</a></h3><p>{{ movie.introduction[:68] }}{% if movie.introduction|length > 68 %}…{% endif %}</p><span class="tag">{{ "有 AI 摘要" if movie.ai_summary else "电影资料" }}</span></div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
