@@ -57,7 +57,7 @@ templates/           页面模板
 data/                原始和清洗后的电影 CSV
 output/              AI 摘要、清洗报告和采集异常
 database/            SQLite 建表脚本；本地 .db 不提交 GitHub
-tests/               网页冒烟测试
+tests/               网页冒烟测试与单元测试
 ```
 
 ## 本地安装
@@ -172,6 +172,11 @@ ADMIN_EMAILS=管理员注册邮箱（可选）
 
 ```powershell
 .\.venv\Scripts\python.exe tests\web_smoke_test.py
+.\.venv\Scripts\python.exe tests\introduction_source_test.py
+.\.venv\Scripts\python.exe tests\import_summaries_key_test.py
+.\.venv\Scripts\python.exe tests\ai_robustness_test.py
+.\.venv\Scripts\python.exe tests\import_web_data_test.py
+.\.venv\Scripts\python.exe tests\logging_setup_test.py
 ```
 
 预期输出：
