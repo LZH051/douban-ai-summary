@@ -1,9 +1,12 @@
+import logging
 import argparse
 import csv
 import os
 
 from db import connect_to_database, load_dotenv_if_available
 from paths import AI_SUMMARY_FILE, ensure_directories
+
+logger = logging.getLogger(__name__)
 
 
 def get_ai_config() -> tuple[str, str, str]:
@@ -106,7 +109,7 @@ def generate_ai_summaries(
 
     movies = fetch_unsummarized_movies(limit, movie_ids)
     if not movies:
-        print("没有待生成摘要的电影")
+        logger.info("没有待生成摘要的电影")
         export_summaries()
         return 0
 
@@ -121,7 +124,7 @@ def generate_ai_summaries(
     )
     generated_count = 0
     for index, movie in enumerate(movies, start=1):
-        print(f"生成摘要 {index}/{len(movies)}：{movie['title']}")
+        logger.info(f"生成摘要 {index}/{len(movies)}：{movie['title']}")
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -153,7 +156,7 @@ def generate_ai_summaries(
             connection.close()
 
     export_summaries()
-    print(f"本次新增 AI 摘要：{generated_count} 条")
+    logger.info(f"本次新增 AI 摘要：{generated_count} 条")
     return generated_count
 
 
@@ -168,4 +171,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     main()

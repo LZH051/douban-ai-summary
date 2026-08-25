@@ -1,8 +1,11 @@
+import logging
 import csv
 
 from db import connect_to_database
 from init_database import initialize_database
 from paths import AI_SUMMARY_FILE
+
+logger = logging.getLogger(__name__)
 
 
 def import_existing_summaries() -> tuple[int, int]:
@@ -36,8 +39,8 @@ def import_existing_summaries() -> tuple[int, int]:
                 )
                 matches = cursor.fetchall()
                 if len(matches) > 1:
-                    print(
-                        f"警告：《{row['title']}》存在多部同名电影且缺少 "
+                    logger.warning(
+                        f"《{row['title']}》存在多部同名电影且缺少 "
                         "douban_id，跳过导入"
                     )
                     unmatched += 1
@@ -68,11 +71,14 @@ def import_existing_summaries() -> tuple[int, int]:
     finally:
         connection.close()
 
-    print(f"导入已有 AI 摘要：{inserted} 条")
-    print(f"未匹配电影：{unmatched} 条")
-    print("本步骤未调用 AI 接口")
+    logger.info(f"导入已有 AI 摘要：{inserted} 条")
+    logger.info(f"未匹配电影：{unmatched} 条")
+    logger.info("本步骤未调用 AI 接口")
     return inserted, unmatched
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     import_existing_summaries()

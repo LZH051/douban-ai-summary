@@ -1,3 +1,4 @@
+import logging
 import csv
 import json
 import re
@@ -9,6 +10,8 @@ from paths import (
     RAW_DATA_FILE,
     ensure_directories,
 )
+
+logger = logging.getLogger(__name__)
 
 
 FIELDNAMES = [
@@ -114,19 +117,22 @@ def clean_data() -> list[dict[str, str]]:
         encoding="utf-8",
     )
 
-    print(f"清洗前：{report['raw_count']} 条")
-    print(f"补全简介：{report['fixed_missing_introduction']} 条")
+    logger.info(f"清洗前：{report['raw_count']} 条")
+    logger.info(f"补全简介：{report['fixed_missing_introduction']} 条")
     sources = report["introduction_sources"]
-    print(
+    logger.info(
         "简介来源分布：短评 {inq} 条 / 元信息降级 {metadata} 条 / "
         "占位 {placeholder} 条".format(**sources)
     )
-    print(f"删除非法数据：{report['removed_invalid']} 条")
-    print(f"删除重复数据：{report['removed_duplicate']} 条")
-    print(f"清洗后：{report['clean_count']} 条")
+    logger.info(f"删除非法数据：{report['removed_invalid']} 条")
+    logger.info(f"删除重复数据：{report['removed_duplicate']} 条")
+    logger.info(f"清洗后：{report['clean_count']} 条")
     return cleaned_rows
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     clean_data()
 

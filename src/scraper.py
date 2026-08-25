@@ -1,3 +1,4 @@
+import logging
 import csv
 import random
 import re
@@ -8,6 +9,8 @@ import requests
 from bs4 import BeautifulSoup
 
 from paths import RAW_DATA_FILE, SCRAPING_ERROR_FILE, ensure_directories
+
+logger = logging.getLogger(__name__)
 
 
 TOP250_URL = "https://movie.douban.com/top250"
@@ -136,10 +139,10 @@ def scrape_top250(
     for page_index in range(pages):
         if page_index:
             delay = random.uniform(delay_min, delay_max)
-            print(f"等待 {delay:.1f} 秒后请求下一页……")
+            logger.info(f"等待 {delay:.1f} 秒后请求下一页……")
             time.sleep(delay)
         start = page_index * 25
-        print(f"采集第 {page_index + 1}/{pages} 页：start={start}")
+        logger.info(f"采集第 {page_index + 1}/{pages} 页：start={start}")
         html = fetch_page(session, start)
         page_rows = parse_page(html, page_start=start, errors=errors)
         if not page_rows:
@@ -147,7 +150,7 @@ def scrape_top250(
             raise RuntimeError(
                 "页面请求成功，但没有解析到电影数据，可能是页面结构已变化。"
             )
-        print(f"本页解析到 {len(page_rows)} 条")
+        logger.info(f"本页解析到 {len(page_rows)} 条")
         all_rows.extend(page_rows)
 
     with RAW_DATA_FILE.open("w", newline="", encoding="utf-8-sig") as file:
@@ -155,11 +158,14 @@ def scrape_top250(
         writer.writeheader()
         writer.writerows(all_rows)
     write_scraping_errors(errors)
-    print(f"原始数据已保存：{RAW_DATA_FILE}")
-    print(f"解析异常已保存：{SCRAPING_ERROR_FILE}（{len(errors)} 条）")
-    print(f"共采集 {len(all_rows)} 条电影数据")
+    logger.info(f"原始数据已保存：{RAW_DATA_FILE}")
+    logger.info(f"解析异常已保存：{SCRAPING_ERROR_FILE}（{len(errors)} 条）")
+    logger.info(f"共采集 {len(all_rows)} 条电影数据")
     return all_rows
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     scrape_top250()

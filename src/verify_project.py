@@ -1,8 +1,11 @@
+import logging
 import argparse
 import csv
 
 from db import connect_to_database, get_database_path
 from paths import CLEAN_DATA_FILE, RAW_DATA_FILE
+
+logger = logging.getLogger(__name__)
 
 
 def read_csv_rows(path) -> list[dict[str, str]]:
@@ -80,18 +83,21 @@ def verify_project(expected_min: int = 20, require_ai: bool = False) -> None:
         require(summary_count >= 5, "AI 摘要不足5条")
 
     manual_extra = movie_count - len(clean_ids)
-    print(f"SQLite：{get_database_path()}")
-    print(f"数据库表：{', '.join(sorted(required_tables))}")
-    print(f"原始数据：{len(raw_rows)} 条")
-    print(f"清洗数据：{len(clean_rows)} 条")
-    print(f"数据库电影：{movie_count} 条（额外手动记录：{manual_extra} 条）")
-    print(f"AI 摘要：{summary_count} 条")
-    print("重复数据检查：通过")
-    print("字段完整性检查：通过")
-    print("AI摘要外键检查：通过")
-    print("项目B SQLite 验收：通过")
+    logger.info(f"SQLite：{get_database_path()}")
+    logger.info(f"数据库表：{', '.join(sorted(required_tables))}")
+    logger.info(f"原始数据：{len(raw_rows)} 条")
+    logger.info(f"清洗数据：{len(clean_rows)} 条")
+    logger.info(f"数据库电影：{movie_count} 条（额外手动记录：{manual_extra} 条）")
+    logger.info(f"AI 摘要：{summary_count} 条")
+    logger.info("重复数据检查：通过")
+    logger.info("字段完整性检查：通过")
+    logger.info("AI摘要外键检查：通过")
+    logger.info("项目B SQLite 验收：通过")
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     arguments = parse_args()
     verify_project(arguments.expected_min, arguments.require_ai)
