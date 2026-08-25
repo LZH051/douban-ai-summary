@@ -19,14 +19,33 @@ def import_existing_summaries() -> tuple[int, int]:
     try:
         cursor = connection.cursor()
         for row in rows:
-            cursor.execute(
-                "SELECT movie_id FROM movies WHERE title = ?",
-                (row["title"],),
-            )
-            movie = cursor.fetchone()
-            if movie is None:
+            # 关联键用 douban_id（自然键，movies 表有唯一约束）。
+            # title 没有唯一约束，同名不同片会挂错电影（P0-4）。
+            douban_id = (row.get("douban_id") or "").strip()
+            if douban_id:
+                cursor.execute(
+                    "SELECT movie_id FROM movies WHERE douban_id = ?",
+                    (douban_id,),
+                )
+                matches = cursor.fetchall()
+            else:
+                # 兼容没有 douban_id 列的历史导出文件；重名时拒绝导入
+                cursor.execute(
+                    "SELECT movie_id FROM movies WHERE title = ?",
+                    (row["title"],),
+                )
+                matches = cursor.fetchall()
+                if len(matches) > 1:
+                    print(
+                        f"警告：《{row['title']}》存在多部同名电影且缺少 "
+                        "douban_id，跳过导入"
+                    )
+                    unmatched += 1
+                    continue
+            if not matches:
                 unmatched += 1
                 continue
+            movie = matches[0]
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO ai_summaries (

@@ -72,7 +72,8 @@ def export_summaries() -> None:
             dict(row)
             for row in connection.execute(
                 """
-                SELECT m.title, s.summary, s.model_name, s.created_at
+                SELECT m.douban_id, m.title, s.summary,
+                       s.model_name, s.created_at
                 FROM ai_summaries AS s
                 JOIN movies AS m ON m.movie_id = s.movie_id
                 ORDER BY s.summary_id
@@ -85,7 +86,9 @@ def export_summaries() -> None:
     with AI_SUMMARY_FILE.open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(
             file,
-            fieldnames=["title", "summary", "model_name", "created_at"],
+            fieldnames=[
+                "douban_id", "title", "summary", "model_name", "created_at"
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
