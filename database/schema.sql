@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS movies (
     rating REAL NOT NULL CHECK (rating >= 0 AND rating <= 10),
     rating_count INTEGER NOT NULL CHECK (rating_count >= 0),
     introduction TEXT NOT NULL,
+    introduction_source TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (introduction_source IN ('inq', 'metadata', 'placeholder', 'unknown')),
     source_url TEXT NOT NULL UNIQUE,
     collected_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

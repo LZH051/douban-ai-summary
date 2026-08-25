@@ -17,13 +17,25 @@ FIELDNAMES = [
     "rating",
     "rating_count",
     "introduction",
+    "introduction_source",
     "source_url",
     "collected_at",
 ]
 
+INTRODUCTION_SOURCES = ("inq", "metadata", "placeholder")
+
 
 def normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def infer_introduction_source(introduction: str) -> str:
+    """为没有 introduction_source 列的历史数据按内容推断来源。"""
+    if not introduction or introduction == "暂无简介":
+        return "placeholder"
+    if introduction.startswith("导演") or "主演:" in introduction:
+        return "metadata"
+    return "inq"
 
 
 def clean_data() -> list[dict[str, str]]:
@@ -42,6 +54,8 @@ def clean_data() -> list[dict[str, str]]:
         "removed_invalid": 0,
         "removed_duplicate": 0,
         "clean_count": 0,
+        # 按来源分组统计简介质量：降级路径必须可见，不能混在"非空即正常"里
+        "introduction_sources": {source: 0 for source in INTRODUCTION_SOURCES},
     }
 
     for raw_row in raw_rows:
@@ -52,7 +66,12 @@ def clean_data() -> list[dict[str, str]]:
 
         if not row["introduction"]:
             row["introduction"] = "暂无简介"
+            row["introduction_source"] = "placeholder"
             report["fixed_missing_introduction"] += 1
+        if row["introduction_source"] not in INTRODUCTION_SOURCES:
+            row["introduction_source"] = infer_introduction_source(
+                row["introduction"]
+            )
 
         try:
             rating = Decimal(row["rating"])
@@ -80,6 +99,7 @@ def clean_data() -> list[dict[str, str]]:
         seen_ids.add(row["douban_id"])
         row["rating"] = format(rating, ".1f")
         row["rating_count"] = str(rating_count)
+        report["introduction_sources"][row["introduction_source"]] += 1
         cleaned_rows.append(row)
 
     report["clean_count"] = len(cleaned_rows)
@@ -96,6 +116,11 @@ def clean_data() -> list[dict[str, str]]:
 
     print(f"清洗前：{report['raw_count']} 条")
     print(f"补全简介：{report['fixed_missing_introduction']} 条")
+    sources = report["introduction_sources"]
+    print(
+        "简介来源分布：短评 {inq} 条 / 元信息降级 {metadata} 条 / "
+        "占位 {placeholder} 条".format(**sources)
+    )
     print(f"删除非法数据：{report['removed_invalid']} 条")
     print(f"删除重复数据：{report['removed_duplicate']} 条")
     print(f"清洗后：{report['clean_count']} 条")

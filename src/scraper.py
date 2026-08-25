@@ -13,7 +13,7 @@ from paths import RAW_DATA_FILE, SCRAPING_ERROR_FILE, ensure_directories
 TOP250_URL = "https://movie.douban.com/top250"
 FIELDNAMES = [
     "douban_id", "title", "rating", "rating_count",
-    "introduction", "source_url", "collected_at",
+    "introduction", "introduction_source", "source_url", "collected_at",
 ]
 ERROR_FIELDNAMES = ["page_start", "source_url", "reason", "collected_at"]
 HEADERS = {
@@ -69,12 +69,17 @@ def parse_page(
                 })
             continue
 
+        # 降级不等于成功：introduction 的三条来源路径必须显性标注，
+        # 否则"短评一条都没抓到"这类问题会被质量报告掩盖（P0-2）
         if intro_node:
             introduction = normalize_text(intro_node.get_text(" ", strip=True))
+            introduction_source = "inq"
         elif metadata_node:
             introduction = normalize_text(metadata_node.get_text(" ", strip=True))
+            introduction_source = "metadata"
         else:
             introduction = "暂无简介"
+            introduction_source = "placeholder"
 
         rows.append({
             "douban_id": id_match.group(1),
@@ -82,6 +87,7 @@ def parse_page(
             "rating": normalize_text(rating_node.get_text()),
             "rating_count": count_match.group(1),
             "introduction": introduction,
+            "introduction_source": introduction_source,
             "source_url": source_url,
             "collected_at": collected_at,
         })

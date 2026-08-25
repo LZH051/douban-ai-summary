@@ -3,5 +3,10 @@
   "fixed_missing_introduction": 0,
   "removed_invalid": 0,
   "removed_duplicate": 0,
-  "clean_count": 250
+  "clean_count": 250,
+  "introduction_sources": {
+    "inq": 0,
+    "metadata": 250,
+    "placeholder": 0
+  }
 }
