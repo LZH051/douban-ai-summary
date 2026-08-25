@@ -11,6 +11,7 @@ CLEAN_DATA_FILE = DATA_DIR / "douban_movies_cleaned.csv"
 CLEANING_REPORT_FILE = OUTPUT_DIR / "cleaning_report.json"
 SCRAPING_ERROR_FILE = OUTPUT_DIR / "scraping_errors.csv"
 AI_SUMMARY_FILE = OUTPUT_DIR / "ai_summaries.csv"
+AI_USAGE_FILE = OUTPUT_DIR / "ai_usage.jsonl"
 DATABASE_FILE = DATABASE_DIR / "douban_ai.db"
 SCHEMA_FILE = DATABASE_DIR / "schema.sql"
 
