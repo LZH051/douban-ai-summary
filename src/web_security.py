@@ -43,3 +43,8 @@ def csrf_token(session: dict) -> str:
 def valid_csrf(session: dict, submitted: str) -> bool:
     expected = session.get("csrf_token", "")
     return bool(expected and submitted) and hmac.compare_digest(expected, submitted)
+
+
+# 供"邮箱不存在"分支做等时校验：短路路径与 scrypt 路径响应时间
+# 差两个数量级，足以枚举注册邮箱（时序侧信道）
+DUMMY_PASSWORD_HASH = hash_password("timing-equalizer-not-a-real-password")

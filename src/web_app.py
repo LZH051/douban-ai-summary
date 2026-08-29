@@ -2,6 +2,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -12,15 +13,16 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
 from logging_setup import configure_logging
 from web_database import Base, SessionLocal, engine, is_production
-from web_models import Favorite, Movie, WatchLink, WebUser
+from web_models import Favorite, LoginAttempt, Movie, WatchLink, WebUser
 from web_security import (
+    DUMMY_PASSWORD_HASH,
     csrf_token,
     hash_password,
     is_valid_email,
@@ -93,7 +95,49 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # style-src 放行内联样式（模板内联 style 与图表库需要），
+    # script-src 保持严格 'self'
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; "
+        "form-action 'self'"
+    )
+    if is_production():
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains"
+        )
+    if request.url.path.startswith("/favorites"):
+        response.headers["Cache-Control"] = "no-store"
     return response
+
+
+LOGIN_ATTEMPT_LIMIT = 5
+LOGIN_ATTEMPT_WINDOW = timedelta(minutes=15)
+
+
+def too_many_login_failures(database: Session, email: str) -> bool:
+    cutoff = datetime.now(timezone.utc) - LOGIN_ATTEMPT_WINDOW
+    count = database.scalar(
+        select(func.count(LoginAttempt.id)).where(
+            LoginAttempt.email == email,
+            LoginAttempt.attempted_at >= cutoff,
+        )
+    ) or 0
+    return count >= LOGIN_ATTEMPT_LIMIT
+
+
+def record_login_failure(database: Session, email: str) -> None:
+    database.add(
+        LoginAttempt(email=email, attempted_at=datetime.now(timezone.utc))
+    )
+    database.commit()
+
+
+def clear_login_failures(database: Session, email: str) -> None:
+    database.execute(delete(LoginAttempt).where(LoginAttempt.email == email))
+    database.commit()
 
 
 def redirect(url: str) -> RedirectResponse:
@@ -380,14 +424,22 @@ def login(
     csrf: str = Form(...),
 ):
     require_csrf(request, csrf)
+    email = normalize_email(email)
     with SessionLocal() as database:
-        user = database.scalar(
-            select(WebUser).where(WebUser.email == normalize_email(email))
-        )
-        if not user or not verify_password(password, user.password_hash):
+        if too_many_login_failures(database, email):
+            return render(
+                request, "login.html",
+                error="尝试次数过多，请约 15 分钟后再试。", status_code=429,
+            )
+        user = database.scalar(select(WebUser).where(WebUser.email == email))
+        # 邮箱不存在时也执行一次哈希校验，消除时序枚举通道
+        stored_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
+        if not user or not verify_password(password, stored_hash):
+            record_login_failure(database, email)
             return render(
                 request, "login.html", error="邮箱或密码不正确。", status_code=401
             )
+        clear_login_failures(database, email)
         request.session.clear()
         request.session["user_id"] = user.id
     return redirect("/movies")
