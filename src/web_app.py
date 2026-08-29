@@ -6,7 +6,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select, text
@@ -158,6 +161,58 @@ def safe_referer_path(request: Request) -> str:
 def require_login(request: Request) -> RedirectResponse:
     flash(request, "请先登录。", "error")
     return redirect("/login")
+
+
+API_ERROR_CODES = {
+    400: "bad_request", 401: "unauthorized", 403: "forbidden",
+    404: "not_found", 405: "method_not_allowed", 409: "conflict",
+    422: "validation_error", 429: "too_many_requests",
+    500: "internal_error", 503: "service_unavailable",
+}
+
+
+def api_error(status_code: int, message: str, details=None) -> JSONResponse:
+    body = {
+        "error": {
+            "code": API_ERROR_CODES.get(status_code, "error"),
+            "message": message,
+        }
+    }
+    if details:
+        body["error"]["details"] = details
+    return JSONResponse(body, status_code=status_code)
+
+
+@app.exception_handler(StarletteHTTPException)
+def handle_http_exception(request: Request, error: StarletteHTTPException):
+    if request.url.path.startswith("/api/"):
+        return api_error(error.status_code, str(error.detail))
+    if error.status_code == 404:
+        with SessionLocal() as database:
+            return render(
+                request, "404.html", user=get_user(request, database),
+                status_code=404, consume_messages=False,
+            )
+    return JSONResponse(
+        {"detail": str(error.detail)}, status_code=error.status_code
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(request: Request, error: RequestValidationError):
+    if request.url.path.startswith("/api/"):
+        details = [
+            {
+                "field": ".".join(
+                    str(part) for part in item.get("loc", []) if part != "query"
+                ),
+                "message": item.get("msg", ""),
+            }
+            for item in error.errors()
+        ]
+        message = details[0]["message"] if details else "请求参数不合法。"
+        return api_error(422, message, details=details)
+    return await request_validation_exception_handler(request, error)
 
 
 @app.exception_handler(CsrfError)
@@ -446,10 +501,6 @@ def delete_watch_link(request: Request, link_id: int, csrf: str = Form(...)):
     return redirect(f"/movies/{movie_id}")
 
 
-@app.exception_handler(404)
-def not_found(request: Request, _exc):
-    with SessionLocal() as database:
-        return render(
-            request, "404.html", user=get_user(request, database),
-            status_code=404, consume_messages=False,
-        )
+from web_api import router as api_router  # noqa: E402
+
+app.include_router(api_router)
