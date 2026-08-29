@@ -36,6 +36,7 @@ AI 摘要保存在数据库中，普通用户浏览时不会重复调用 AI 接�
 
 - `/search` 页面与 `GET /api/v1/search?q=`：用一句话描述找电影（如"讲越狱的高分片"）
 - 语料 = 片名 + 豆瓣短评/简介 +（如有）AI 摘要，存入本地 Chroma 向量库
+- 本地先安装 RAG 依赖：`pip install -r requirements-rag.txt`（约 200MB+，故意不放主 requirements——会超出 Vercel 体积限制；Vercel 上语义检索走降级提示，本地/自有服务器可完整使用）
 - 构建索引：`python src/build_index.py --confirm-paid-run`（需配置
   `AI_EMBEDDING_MODEL`；未配置时可用 `--offline-hash` 构建零费用的字面匹配索引做本地演示）
 - 幂等与成本控制：按 douban_id upsert，内容未变的电影不重复向量化

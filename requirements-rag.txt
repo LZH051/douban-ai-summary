@@ -1,0 +1,6 @@
+# RAG/LangChain 依赖单独安装：chromadb 及其传递依赖约 200MB+，
+# 放进主 requirements 会超出 Vercel serverless 250MB 限制、
+# 直接弄挂线上构建。语义检索代码全部惰性导入，Vercel 上缺这些
+# 包时 /search 与 API 会走"索引未构建"降级态，不影响其他功能。
+chromadb>=1.0.0
+langchain-openai>=1.0.0
