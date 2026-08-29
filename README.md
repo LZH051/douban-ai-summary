@@ -41,6 +41,17 @@ AI 摘要保存在数据库中，普通用户浏览时不会重复调用 AI 接�
 - 幂等与成本控制：按 douban_id upsert，内容未变的电影不重复向量化
 - 索引未构建/配置缺失时页面与 API 都会明确降级提示
 
+### AI 摘要：双引擎 + Prompt 评测
+
+- 手写链路 `src/ai_summary.py` 与 LangChain 链路 `src/ai_summary_lc.py`
+  并存，行为对齐、共享缓存；取舍分析见
+  [`docs/langchain_notes.md`](docs/langchain_notes.md)
+- Prompt 评测集 `evals/summary_cases.jsonl`（10 条真实电影）：
+  `python evals/run_eval.py --use-cached` 免费回放历史输出判分；
+  `python evals/run_eval.py --engine lc --confirm-paid-run --save-cache`
+  在线实跑并更新缓存。规则：非空/≤80字/含片名/不复述评分与人数/
+  无臆测词，报告输出到 `evals/report.json`
+
 ### JSON API（/api/v1）
 
 错误统一封装为 `{"error": {"code", "message"}}`：
