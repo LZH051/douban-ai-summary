@@ -7,7 +7,6 @@
 """
 
 import csv
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -29,10 +28,11 @@ def write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def main() -> None:
+def test_import_web_data() -> None:
+    # 数据库由 conftest 提供（engine 在导入期已固定，
+    # 测试中改 DATABASE_URL 环境变量不会生效）
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
-        os.environ["DATABASE_URL"] = f"sqlite:///{workdir / 'web.db'}"
 
         import import_web_data
         from sqlalchemy import select
@@ -86,5 +86,4 @@ def main() -> None:
     print("IMPORT_WEB_DATA_TEST=PASS")
 
 
-if __name__ == "__main__":
-    main()
+

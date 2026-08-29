@@ -49,7 +49,7 @@ def seed() -> int:
         return first
 
 
-def main() -> None:
+def test_api_v1_endpoints() -> None:
     with TestClient(app) as client:
         first_id = seed()
 
@@ -102,4 +102,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    test_api_v1_endpoints()

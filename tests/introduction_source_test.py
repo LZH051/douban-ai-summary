@@ -93,11 +93,3 @@ def test_cleaner_reports_source_counts() -> None:
         assert by_title["这个杀手不太冷"]["introduction_source"] == "placeholder"
 
 
-def main() -> None:
-    test_parse_page_marks_source()
-    test_cleaner_reports_source_counts()
-    print("INTRODUCTION_SOURCE_TEST=PASS")
-
-
-if __name__ == "__main__":
-    main()

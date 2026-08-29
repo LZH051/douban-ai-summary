@@ -75,10 +75,10 @@ def setup_database(db_path: Path) -> None:
     connection.close()
 
 
-def main() -> None:
-    os.environ.update(
-        AI_API_KEY="test-key", AI_BASE_URL="https://example.com", AI_MODEL="m"
-    )
+def test_ai_summary_robustness(monkeypatch) -> None:
+    monkeypatch.setenv("AI_API_KEY", "test-key")
+    monkeypatch.setenv("AI_BASE_URL", "https://example.com")
+    monkeypatch.setenv("AI_MODEL", "m")
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
         db_path = workdir / "test.db"
@@ -129,5 +129,4 @@ def main() -> None:
     print("AI_ROBUSTNESS_TEST=PASS")
 
 
-if __name__ == "__main__":
-    main()
+

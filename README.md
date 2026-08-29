@@ -192,6 +192,32 @@ ADMIN_EMAILS=管理员注册邮箱（可选）
 
 ## 测试
 
+安装开发依赖后，一条命令运行全部测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+临时数据库与登录态由 `tests/conftest.py` 提供，每个用例独享干净数据库。
+推送到 GitHub 后，`.github/workflows/tests.yml` 会自动运行同样的测试。
+
+## Vercel 部署
+
+1. 将代码上传到 GitHub，但不要上传 `.env`、`.db`、虚拟环境或日志。
+2. 在 Vercel 导入 GitHub 仓库，预设选择 FastAPI，根目录保持 `./`。
+3. 在 Vercel 设置环境变量：
+
+```text
+DATABASE_URL=Neon 的 pooler 连接字符串
+SESSION_SECRET=随机长字符串
+ADMIN_EMAILS=管理员注册邮箱（可选）
+```
+
+4. 点击 Deploy，并访问 `/health`、`/movies` 和 `/register` 验证部署。
+
+## 测试
+
 ```powershell
 .\.venv\Scripts\python.exe tests\web_smoke_test.py
 .\.venv\Scripts\python.exe tests\introduction_source_test.py

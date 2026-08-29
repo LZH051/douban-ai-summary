@@ -35,7 +35,7 @@ def setup_database(db_path: Path) -> None:
     connection.close()
 
 
-def main() -> None:
+def test_import_uses_douban_id() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
         db_path = workdir / "test.db"
@@ -79,4 +79,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    test_import_uses_douban_id()

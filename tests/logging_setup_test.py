@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import logging_setup
 
 
-def main() -> None:
+def test_logging_setup() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         log_file = Path(tmp) / "app.log"
         logging_setup.configure_logging(log_file=log_file, force=True)
@@ -41,4 +41,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    test_logging_setup()

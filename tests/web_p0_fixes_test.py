@@ -24,12 +24,8 @@ os.environ.setdefault("SESSION_SECRET", "b-p0-fixes-test-secret")
 os.environ["ADMIN_EMAILS"] = "admin@example.com"
 
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import select  # noqa: E402
-
 import web_app  # noqa: E402
 from web_app import app, flash  # noqa: E402
-from web_database import SessionLocal  # noqa: E402
-from web_models import Movie  # noqa: E402
 
 
 def csrf_from(html: str) -> str:
@@ -51,22 +47,6 @@ def register(client: TestClient, email: str) -> None:
         },
     )
     assert response.status_code == 200, response.status_code
-
-
-def seed_movie() -> int:
-    with SessionLocal() as database:
-        movie = database.scalar(select(Movie).where(Movie.douban_id == 42))
-        if movie is None:
-            movie = Movie(
-                douban_id=42, title="测试电影", rating=9.0,
-                rating_count=1000, introduction="简介",
-                source_url="https://movie.douban.com/subject/42/",
-                collected_at="2026-08-29",
-            )
-            database.add(movie)
-            database.commit()
-            database.refresh(movie)
-        return movie.movie_id
 
 
 def test_flash_appends() -> None:
@@ -139,19 +119,3 @@ def test_favorites_requires_login() -> None:
         assert "请先登录" in response.text
 
 
-def main() -> None:
-    movie_id = None
-    with TestClient(app):
-        movie_id = seed_movie()
-    test_flash_appends()
-    test_register_clears_session()
-    test_csrf_friendly(movie_id)
-    test_min_rating_garbage()
-    test_watch_link_errors(movie_id)
-    test_health_probes_database()
-    test_favorites_requires_login()
-    print("WEB_P0_FIXES_TEST=PASS")
-
-
-if __name__ == "__main__":
-    main()
