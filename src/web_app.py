@@ -378,6 +378,60 @@ def movie_detail(request: Request, movie_id: int):
         )
 
 
+@app.get("/search", response_class=HTMLResponse)
+def semantic_search_page(request: Request, q: str = ""):
+    q = q.strip()[:80]
+    with SessionLocal() as database:
+        user = get_user(request, database)
+        import semantic_index
+        from embeddings import (
+            ApiEmbedder,
+            HashingEmbedder,
+            api_embedder_configured,
+        )
+
+        state = "ready"
+        matches = []
+        movies = []
+        signature = semantic_index.index_embedder_signature()
+        if not semantic_index.index_ready():
+            state = "no_index"
+        elif q:
+            if signature and signature.startswith("api:"):
+                if not api_embedder_configured():
+                    state = "no_embedder_config"
+                else:
+                    embedder = ApiEmbedder()
+            else:
+                embedder = HashingEmbedder()
+            if state == "ready":
+                try:
+                    matches = semantic_index.search(q, embedder, top_k=6)
+                except Exception:
+                    logger.exception("语义检索失败 q=%s", q)
+                    state = "search_error"
+        if matches:
+            by_id = {
+                movie.movie_id: movie
+                for movie in database.scalars(
+                    select(Movie)
+                    .options(selectinload(Movie.ai_summary))
+                    .where(Movie.movie_id.in_(
+                        [match["movie_id"] for match in matches]
+                    ))
+                ).all()
+            }
+            movies = [
+                (by_id[match["movie_id"]], match["score"])
+                for match in matches
+                if match["movie_id"] in by_id
+            ]
+        return render(
+            request, "search.html", user=user, q=q, state=state,
+            results=movies, embedder_signature=signature,
+        )
+
+
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
     return render(request, "register.html")

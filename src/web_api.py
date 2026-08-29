@@ -145,3 +145,36 @@ def toggle_favorite(request: Request, movie_id: int):
             user.id, movie_id, favorite,
         )
         return {"movie_id": movie_id, "favorite": favorite}
+
+
+@router.get("/search")
+def semantic_search(q: str, top_k: int = Query(5, ge=1, le=20)):
+    import semantic_index
+    from embeddings import (
+        ApiEmbedder,
+        HashingEmbedder,
+        api_embedder_configured,
+    )
+
+    q = q.strip()[:80]
+    if not q:
+        raise HTTPException(status_code=422, detail="请提供查询词 q。")
+    if not semantic_index.index_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="语义索引尚未构建，请先运行 src/build_index.py。",
+        )
+    signature = semantic_index.index_embedder_signature() or ""
+    if signature.startswith("api:"):
+        if not api_embedder_configured():
+            raise HTTPException(
+                status_code=503, detail="索引使用 API embedding，但未配置密钥。"
+            )
+        embedder = ApiEmbedder()
+    else:
+        embedder = HashingEmbedder()
+    return {
+        "query": q,
+        "embedder": signature,
+        "results": semantic_index.search(q, embedder, top_k=top_k),
+    }

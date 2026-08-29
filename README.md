@@ -32,6 +32,15 @@ AI 摘要保存在数据库中，普通用户浏览时不会重复调用 AI 接�
 - 收藏页显示个人统计（收藏数、平均分、最高分）
 - 手机（H5）与电脑浏览器均已适配：移动端抽屉导航、单列卡片、精简分页
 
+### 语义找片（RAG 检索）
+
+- `/search` 页面与 `GET /api/v1/search?q=`：用一句话描述找电影（如"讲越狱的高分片"）
+- 语料 = 片名 + 豆瓣短评/简介 +（如有）AI 摘要，存入本地 Chroma 向量库
+- 构建索引：`python src/build_index.py --confirm-paid-run`（需配置
+  `AI_EMBEDDING_MODEL`；未配置时可用 `--offline-hash` 构建零费用的字面匹配索引做本地演示）
+- 幂等与成本控制：按 douban_id upsert，内容未变的电影不重复向量化
+- 索引未构建/配置缺失时页面与 API 都会明确降级提示
+
 ### JSON API（/api/v1）
 
 错误统一封装为 `{"error": {"code", "message"}}`：
@@ -40,6 +49,7 @@ AI 摘要保存在数据库中，普通用户浏览时不会重复调用 AI 接�
 |---|---|---|
 | GET | `/api/v1/movies` | 搜索/评分筛选/分页（`q`/`min_rating`/`page`/`page_size`≤100） |
 | GET | `/api/v1/movies/{id}` | 详情，含 AI 摘要与正版链接 |
+| GET | `/api/v1/search` | 语义检索（`q`/`top_k`≤20） |
 | GET | `/api/v1/favorites` | 我的收藏（需登录会话） |
 | POST | `/api/v1/movies/{id}/favorite` | 收藏切换（需登录会话） |
 

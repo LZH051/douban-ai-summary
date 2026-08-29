@@ -17,6 +17,7 @@
         <button class="nav-toggle" type="button" aria-label="打开导航" aria-expanded="false" aria-controls="main-nav">☰</button>
         <nav id="main-nav" aria-label="主导航">
             <a href="/movies">电影库</a>
+            <a href="/search">语义找片</a>
             {% if current_user %}
                 <a href="/favorites">我的收藏</a>
                 <span class="user-name">{{ current_user.username }}</span>

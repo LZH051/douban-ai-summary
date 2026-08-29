@@ -35,6 +35,27 @@ SAMPLE_HTML = """
 """
 
 
+NEW_STRUCTURE_HTML = """
+<div>
+  <div class="item">
+    <div class="hd"><a href="https://movie.douban.com/subject/1292052/">
+      <span class="title">肖申克的救赎</span></a></div>
+    <div class="bd"><p>导演: 弗兰克·德拉邦特 主演: 蒂姆·罗宾斯 1994 / 美国 / 犯罪 剧情</p>
+      <span class="rating_num">9.7</span><span>3324390人评价</span>
+      <p class="quote"><span>希望让人自由。</span></p></div>
+  </div>
+</div>
+"""
+
+
+def test_parse_page_new_quote_structure() -> None:
+    """豆瓣 2026 改版：短评在 p.quote > span，选择器必须兼容。"""
+    rows = scraper.parse_page(NEW_STRUCTURE_HTML)
+    assert len(rows) == 1, rows
+    assert rows[0]["introduction"] == "希望让人自由。", rows[0]
+    assert rows[0]["introduction_source"] == "inq", rows[0]
+
+
 def test_parse_page_marks_source() -> None:
     rows = scraper.parse_page(SAMPLE_HTML)
     assert len(rows) == 2, rows

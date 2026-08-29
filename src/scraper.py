@@ -47,7 +47,8 @@ def parse_page(
         source_url = link.get("href", "").strip() if link else ""
         title_node = item.select_one("div.hd span.title")
         rating_node = item.select_one("span.rating_num")
-        intro_node = item.select_one("span.inq")
+        # 豆瓣 2026 年改版后短评在 p.quote > span；保留 span.inq 兼容旧结构
+        intro_node = item.select_one("p.quote span") or item.select_one("span.inq")
         metadata_node = item.select_one("div.bd > p")
 
         if not link or not title_node or not rating_node:
