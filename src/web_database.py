@@ -10,6 +10,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 
+def is_production() -> bool:
+    """Vercel 或显式 APP_ENV=production/staging 都视为线上环境。"""
+    return bool(
+        os.getenv("VERCEL")
+        or os.getenv("APP_ENV", "").strip().lower()
+        in {"production", "prod", "staging"}
+    )
+
+
 def get_database_url() -> str:
     configured = os.getenv("DATABASE_URL", "").strip()
     if configured:

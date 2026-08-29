@@ -35,6 +35,6 @@ with TestClient(app) as client:
     assert "在爱奇艺搜索" in detail.text
     assert "search.bilibili.com/all" in detail.text
     assert "不代表平台一定拥有该电影版权" in detail.text
-    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/health").json() == {"status": "ok", "database": "ok"}
 
 print("WEB_SMOKE_TEST=PASS")

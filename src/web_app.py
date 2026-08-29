@@ -3,6 +3,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
 from logging_setup import configure_logging
-from web_database import Base, SessionLocal, engine
+from web_database import Base, SessionLocal, engine, is_production
 from web_models import Favorite, Movie, WatchLink, WebUser
 from web_security import (
     csrf_token,
@@ -31,7 +32,8 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip()
 PLATFORMS = ("爱奇艺", "腾讯视频", "优酷", "哔哩哔哩", "芒果TV", "其他正版平台")
 MOVIES_PER_PAGE = 12
 
-if os.getenv("VERCEL") and not SESSION_SECRET:
+# 守卫按"是否线上"而不是"是否 Vercel"判断
+if is_production() and not SESSION_SECRET:
     raise RuntimeError("线上部署必须配置 SESSION_SECRET 环境变量。")
 if not SESSION_SECRET:
     SESSION_SECRET = "local-development-only-change-before-deployment"
@@ -56,7 +58,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site="lax",
-    https_only=bool(os.getenv("VERCEL")),
+    https_only=is_production(),
     max_age=60 * 60 * 24 * 14,
 )
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
@@ -96,7 +98,9 @@ def redirect(url: str) -> RedirectResponse:
 
 
 def flash(request: Request, message: str, kind: str = "success") -> None:
-    request.session["messages"] = [{"text": message, "kind": kind}]
+    messages = request.session.get("messages", [])
+    messages.append({"text": message, "kind": kind})
+    request.session["messages"] = messages[-5:]
 
 
 def get_user(request: Request, database: Session) -> WebUser | None:
@@ -113,13 +117,20 @@ def is_admin(user: WebUser | None) -> bool:
     return bool(user and user.email in allowed)
 
 
-def render(request: Request, name: str, *, user=None, status_code=200, **values):
+def render(
+    request: Request, name: str, *, user=None, status_code=200,
+    consume_messages=True, **values,
+):
+    if consume_messages:
+        messages = request.session.pop("messages", [])
+    else:
+        messages = request.session.get("messages", [])
     context = {
         "request": request,
         "current_user": user,
         "is_admin": is_admin(user),
         "csrf_token": csrf_token(request.session),
-        "messages": request.session.pop("messages", []),
+        "messages": messages,
         **values,
     }
     return templates.TemplateResponse(
@@ -127,14 +138,49 @@ def render(request: Request, name: str, *, user=None, status_code=200, **values)
     )
 
 
+class CsrfError(Exception):
+    pass
+
+
 def require_csrf(request: Request, submitted: str) -> None:
     if not valid_csrf(request.session, submitted):
-        raise HTTPException(status_code=400, detail="请求已失效，请刷新页面后重试。")
+        raise CsrfError
+
+
+def safe_referer_path(request: Request) -> str:
+    """只跳回同源路径，防止 Referer 被用作 open redirect。"""
+    referer = urlparse(request.headers.get("referer", ""))
+    if referer.netloc in ("", request.url.netloc) and referer.path.startswith("/"):
+        return referer.path
+    return "/"
+
+
+def require_login(request: Request) -> RedirectResponse:
+    flash(request, "请先登录。", "error")
+    return redirect("/login")
+
+
+@app.exception_handler(CsrfError)
+def handle_csrf_error(request: Request, _error: CsrfError):
+    if not isinstance(request.session.get("user_id"), int):
+        return require_login(request)
+    flash(request, "请求已失效，请刷新页面后重试。", "error")
+    return redirect(safe_referer_path(request))
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    try:
+        with SessionLocal() as database:
+            database.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("健康检查：数据库探测失败")
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            {"status": "degraded", "database": "error"}, status_code=503
+        )
+    return {"status": "ok", "database": "ok"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -151,10 +197,20 @@ def home(request: Request):
 
 
 @app.get("/movies", response_class=HTMLResponse)
-def movie_list(request: Request, q: str = "", min_rating: float = 0, page: int = 1):
+def movie_list(request: Request, q: str = "", min_rating: str = "", page: str = "1"):
     q = q.strip()[:80]
-    min_rating = max(0, min(10, min_rating))
-    page = max(1, page)
+    # 手工解析而不是声明 float/int：非法查询串应回到正常页面，
+    # 而不是给用户抛英文 422 JSON
+    try:
+        min_rating_value = max(0.0, min(10.0, float(min_rating or 0)))
+    except ValueError:
+        min_rating_value = 0.0
+    try:
+        page_value = max(1, int(page or 1))
+    except ValueError:
+        page_value = 1
+    min_rating = min_rating_value
+    page = page_value
     with SessionLocal() as database:
         user = get_user(request, database)
         conditions = []
@@ -250,6 +306,7 @@ def register(
                 request, "register.html", errors=["该邮箱已经注册。"],
                 form={"username": username, "email": email}, status_code=409,
             )
+        request.session.clear()
         request.session["user_id"] = user.id
     flash(request, "注册成功，欢迎来到光影智选。")
     return redirect("/movies")
@@ -293,7 +350,7 @@ def favorites(request: Request):
     with SessionLocal() as database:
         user = get_user(request, database)
         if not user:
-            return redirect("/login")
+            return require_login(request)
         movies = database.scalars(
             select(Movie)
             .join(Favorite)
@@ -309,7 +366,7 @@ def toggle_favorite(request: Request, movie_id: int, csrf: str = Form(...)):
     with SessionLocal() as database:
         user = get_user(request, database)
         if not user:
-            return redirect("/login")
+            return require_login(request)
         if not database.get(Movie, movie_id):
             raise HTTPException(status_code=404)
         existing = database.scalar(
@@ -320,10 +377,15 @@ def toggle_favorite(request: Request, movie_id: int, csrf: str = Form(...)):
         if existing:
             database.delete(existing)
             message = "已取消收藏。"
+            database.commit()
         else:
             database.add(Favorite(user_id=user.id, movie_id=movie_id))
             message = "已加入我的收藏。"
-        database.commit()
+            try:
+                database.commit()
+            except IntegrityError:
+                # 双击/多标签并发：另一请求已插入同一条，视为已收藏
+                database.rollback()
     flash(request, message)
     return redirect(f"/movies/{movie_id}")
 
@@ -340,12 +402,17 @@ def save_watch_link(
     with SessionLocal() as database:
         user = get_user(request, database)
         if not is_admin(user):
-            raise HTTPException(status_code=403, detail="仅管理员可以维护正版链接。")
-        if platform_name not in PLATFORMS:
-            raise HTTPException(status_code=422, detail="请选择有效平台。")
+            flash(request, "仅管理员可以维护正版链接。", "error")
+            return redirect(safe_referer_path(request))
+        if not database.get(Movie, movie_id):
+            raise HTTPException(status_code=404)
         watch_url = watch_url.strip()
+        if platform_name not in PLATFORMS:
+            flash(request, "请选择有效平台。", "error")
+            return redirect(f"/movies/{movie_id}")
         if not watch_url.startswith("https://") or len(watch_url) > 1000:
-            raise HTTPException(status_code=422, detail="请输入有效的 HTTPS 正版链接。")
+            flash(request, "请输入有效的 HTTPS 正版链接。", "error")
+            return redirect(f"/movies/{movie_id}")
         existing = database.scalar(
             select(WatchLink).where(
                 WatchLink.movie_id == movie_id,
@@ -382,4 +449,7 @@ def delete_watch_link(request: Request, link_id: int, csrf: str = Form(...)):
 @app.exception_handler(404)
 def not_found(request: Request, _exc):
     with SessionLocal() as database:
-        return render(request, "404.html", user=get_user(request, database), status_code=404)
+        return render(
+            request, "404.html", user=get_user(request, database),
+            status_code=404, consume_messages=False,
+        )
