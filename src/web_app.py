@@ -1,19 +1,28 @@
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
-from web_database import Base, SessionLocal, engine
-from web_models import Favorite, Movie, WatchLink, WebUser
+from logging_setup import configure_logging
+from web_database import Base, SessionLocal, engine, is_production
+from web_models import Favorite, LoginAttempt, Movie, WatchLink, WebUser
 from web_security import (
+    DUMMY_PASSWORD_HASH,
     csrf_token,
     hash_password,
     is_valid_email,
@@ -28,7 +37,8 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip()
 PLATFORMS = ("爱奇艺", "腾讯视频", "优酷", "哔哩哔哩", "芒果TV", "其他正版平台")
 MOVIES_PER_PAGE = 12
 
-if os.getenv("VERCEL") and not SESSION_SECRET:
+# 守卫按"是否线上"而不是"是否 Vercel"判断
+if is_production() and not SESSION_SECRET:
     raise RuntimeError("线上部署必须配置 SESSION_SECRET 环境变量。")
 if not SESSION_SECRET:
     SESSION_SECRET = "local-development-only-change-before-deployment"
@@ -45,16 +55,38 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+configure_logging()
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="光影智选", lifespan=lifespan)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site="lax",
-    https_only=bool(os.getenv("VERCEL")),
+    https_only=is_production(),
     max_age=60 * 60 * 24 * 14,
 )
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=PROJECT_ROOT / "templates")
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    started_at = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("%s %s 未捕获异常", request.method, request.url.path)
+        raise
+    elapsed_ms = (time.perf_counter() - started_at) * 1000
+    logger.info(
+        "%s %s %s %.0fms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
 
 
 @app.middleware("http")
@@ -63,7 +95,49 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # style-src 放行内联样式（模板内联 style 与图表库需要），
+    # script-src 保持严格 'self'
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; "
+        "form-action 'self'"
+    )
+    if is_production():
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains"
+        )
+    if request.url.path.startswith("/favorites"):
+        response.headers["Cache-Control"] = "no-store"
     return response
+
+
+LOGIN_ATTEMPT_LIMIT = 5
+LOGIN_ATTEMPT_WINDOW = timedelta(minutes=15)
+
+
+def too_many_login_failures(database: Session, email: str) -> bool:
+    cutoff = datetime.now(timezone.utc) - LOGIN_ATTEMPT_WINDOW
+    count = database.scalar(
+        select(func.count(LoginAttempt.id)).where(
+            LoginAttempt.email == email,
+            LoginAttempt.attempted_at >= cutoff,
+        )
+    ) or 0
+    return count >= LOGIN_ATTEMPT_LIMIT
+
+
+def record_login_failure(database: Session, email: str) -> None:
+    database.add(
+        LoginAttempt(email=email, attempted_at=datetime.now(timezone.utc))
+    )
+    database.commit()
+
+
+def clear_login_failures(database: Session, email: str) -> None:
+    database.execute(delete(LoginAttempt).where(LoginAttempt.email == email))
+    database.commit()
 
 
 def redirect(url: str) -> RedirectResponse:
@@ -71,7 +145,9 @@ def redirect(url: str) -> RedirectResponse:
 
 
 def flash(request: Request, message: str, kind: str = "success") -> None:
-    request.session["messages"] = [{"text": message, "kind": kind}]
+    messages = request.session.get("messages", [])
+    messages.append({"text": message, "kind": kind})
+    request.session["messages"] = messages[-5:]
 
 
 def get_user(request: Request, database: Session) -> WebUser | None:
@@ -88,13 +164,20 @@ def is_admin(user: WebUser | None) -> bool:
     return bool(user and user.email in allowed)
 
 
-def render(request: Request, name: str, *, user=None, status_code=200, **values):
+def render(
+    request: Request, name: str, *, user=None, status_code=200,
+    consume_messages=True, **values,
+):
+    if consume_messages:
+        messages = request.session.pop("messages", [])
+    else:
+        messages = request.session.get("messages", [])
     context = {
         "request": request,
         "current_user": user,
         "is_admin": is_admin(user),
         "csrf_token": csrf_token(request.session),
-        "messages": request.session.pop("messages", []),
+        "messages": messages,
         **values,
     }
     return templates.TemplateResponse(
@@ -102,14 +185,101 @@ def render(request: Request, name: str, *, user=None, status_code=200, **values)
     )
 
 
+class CsrfError(Exception):
+    pass
+
+
 def require_csrf(request: Request, submitted: str) -> None:
     if not valid_csrf(request.session, submitted):
-        raise HTTPException(status_code=400, detail="请求已失效，请刷新页面后重试。")
+        raise CsrfError
+
+
+def safe_referer_path(request: Request) -> str:
+    """只跳回同源路径，防止 Referer 被用作 open redirect。"""
+    referer = urlparse(request.headers.get("referer", ""))
+    if referer.netloc in ("", request.url.netloc) and referer.path.startswith("/"):
+        return referer.path
+    return "/"
+
+
+def require_login(request: Request) -> RedirectResponse:
+    flash(request, "请先登录。", "error")
+    return redirect("/login")
+
+
+API_ERROR_CODES = {
+    400: "bad_request", 401: "unauthorized", 403: "forbidden",
+    404: "not_found", 405: "method_not_allowed", 409: "conflict",
+    422: "validation_error", 429: "too_many_requests",
+    500: "internal_error", 503: "service_unavailable",
+}
+
+
+def api_error(status_code: int, message: str, details=None) -> JSONResponse:
+    body = {
+        "error": {
+            "code": API_ERROR_CODES.get(status_code, "error"),
+            "message": message,
+        }
+    }
+    if details:
+        body["error"]["details"] = details
+    return JSONResponse(body, status_code=status_code)
+
+
+@app.exception_handler(StarletteHTTPException)
+def handle_http_exception(request: Request, error: StarletteHTTPException):
+    if request.url.path.startswith("/api/"):
+        return api_error(error.status_code, str(error.detail))
+    if error.status_code == 404:
+        with SessionLocal() as database:
+            return render(
+                request, "404.html", user=get_user(request, database),
+                status_code=404, consume_messages=False,
+            )
+    return JSONResponse(
+        {"detail": str(error.detail)}, status_code=error.status_code
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(request: Request, error: RequestValidationError):
+    if request.url.path.startswith("/api/"):
+        details = [
+            {
+                "field": ".".join(
+                    str(part) for part in item.get("loc", []) if part != "query"
+                ),
+                "message": item.get("msg", ""),
+            }
+            for item in error.errors()
+        ]
+        message = details[0]["message"] if details else "请求参数不合法。"
+        return api_error(422, message, details=details)
+    return await request_validation_exception_handler(request, error)
+
+
+@app.exception_handler(CsrfError)
+def handle_csrf_error(request: Request, _error: CsrfError):
+    if not isinstance(request.session.get("user_id"), int):
+        return require_login(request)
+    flash(request, "请求已失效，请刷新页面后重试。", "error")
+    return redirect(safe_referer_path(request))
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    try:
+        with SessionLocal() as database:
+            database.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("健康检查：数据库探测失败")
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            {"status": "degraded", "database": "error"}, status_code=503
+        )
+    return {"status": "ok", "database": "ok"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -126,10 +296,20 @@ def home(request: Request):
 
 
 @app.get("/movies", response_class=HTMLResponse)
-def movie_list(request: Request, q: str = "", min_rating: float = 0, page: int = 1):
+def movie_list(request: Request, q: str = "", min_rating: str = "", page: str = "1"):
     q = q.strip()[:80]
-    min_rating = max(0, min(10, min_rating))
-    page = max(1, page)
+    # 手工解析而不是声明 float/int：非法查询串应回到正常页面，
+    # 而不是给用户抛英文 422 JSON
+    try:
+        min_rating_value = max(0.0, min(10.0, float(min_rating or 0)))
+    except ValueError:
+        min_rating_value = 0.0
+    try:
+        page_value = max(1, int(page or 1))
+    except ValueError:
+        page_value = 1
+    min_rating = min_rating_value
+    page = page_value
     with SessionLocal() as database:
         user = get_user(request, database)
         conditions = []
@@ -151,11 +331,26 @@ def movie_list(request: Request, q: str = "", min_rating: float = 0, page: int =
         ).all()
         first_page_number = max(1, page - 2)
         last_page_number = min(total_pages, page + 2)
+
+        # 评分分布直方图（0.5 分一档）：在 Python 端分桶，
+        # 避免 SQL 层的 floor/round 方言差异
+        ratings = database.scalars(
+            select(Movie.rating).where(*conditions)
+        ).all()
+        buckets: dict[float, int] = {}
+        for rating in ratings:
+            bucket = int(rating * 2) / 2
+            buckets[bucket] = buckets.get(bucket, 0) + 1
+        rating_histogram = [
+            {"bucket": f"{bucket:.1f}", "count": buckets[bucket]}
+            for bucket in sorted(buckets)
+        ]
         return render(
             request, "movies.html", user=user, movies=movies,
             q=q, min_rating=min_rating, page=page, total=total,
-            total_pages=total_pages,
+            total_pages=total_pages, per_page=MOVIES_PER_PAGE,
             page_numbers=range(first_page_number, last_page_number + 1),
+            rating_histogram=rating_histogram,
         )
 
 
@@ -180,6 +375,60 @@ def movie_detail(request: Request, movie_id: int):
         return render(
             request, "movie_detail.html", user=user, movie=movie,
             favorite=favorite, platforms=PLATFORMS,
+        )
+
+
+@app.get("/search", response_class=HTMLResponse)
+def semantic_search_page(request: Request, q: str = ""):
+    q = q.strip()[:80]
+    with SessionLocal() as database:
+        user = get_user(request, database)
+        import semantic_index
+        from embeddings import (
+            ApiEmbedder,
+            HashingEmbedder,
+            api_embedder_configured,
+        )
+
+        state = "ready"
+        matches = []
+        movies = []
+        signature = semantic_index.index_embedder_signature()
+        if not semantic_index.index_ready():
+            state = "no_index"
+        elif q:
+            if signature and signature.startswith("api:"):
+                if not api_embedder_configured():
+                    state = "no_embedder_config"
+                else:
+                    embedder = ApiEmbedder()
+            else:
+                embedder = HashingEmbedder()
+            if state == "ready":
+                try:
+                    matches = semantic_index.search(q, embedder, top_k=6)
+                except Exception:
+                    logger.exception("语义检索失败 q=%s", q)
+                    state = "search_error"
+        if matches:
+            by_id = {
+                movie.movie_id: movie
+                for movie in database.scalars(
+                    select(Movie)
+                    .options(selectinload(Movie.ai_summary))
+                    .where(Movie.movie_id.in_(
+                        [match["movie_id"] for match in matches]
+                    ))
+                ).all()
+            }
+            movies = [
+                (by_id[match["movie_id"]], match["score"])
+                for match in matches
+                if match["movie_id"] in by_id
+            ]
+        return render(
+            request, "search.html", user=user, q=q, state=state,
+            results=movies, embedder_signature=signature,
         )
 
 
@@ -225,6 +474,7 @@ def register(
                 request, "register.html", errors=["该邮箱已经注册。"],
                 form={"username": username, "email": email}, status_code=409,
             )
+        request.session.clear()
         request.session["user_id"] = user.id
     flash(request, "注册成功，欢迎来到光影智选。")
     return redirect("/movies")
@@ -243,14 +493,24 @@ def login(
     csrf: str = Form(...),
 ):
     require_csrf(request, csrf)
+    email = normalize_email(email)
     with SessionLocal() as database:
-        user = database.scalar(
-            select(WebUser).where(WebUser.email == normalize_email(email))
-        )
-        if not user or not verify_password(password, user.password_hash):
+        if too_many_login_failures(database, email):
             return render(
-                request, "login.html", error="邮箱或密码不正确。", status_code=401
+                request, "login.html",
+                errors=["尝试次数过多，请约 15 分钟后再试。"],
+                form={"email": email}, status_code=429,
             )
+        user = database.scalar(select(WebUser).where(WebUser.email == email))
+        # 邮箱不存在时也执行一次哈希校验，消除时序枚举通道
+        stored_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
+        if not user or not verify_password(password, stored_hash):
+            record_login_failure(database, email)
+            return render(
+                request, "login.html", errors=["邮箱或密码不正确。"],
+                form={"email": email}, status_code=401,
+            )
+        clear_login_failures(database, email)
         request.session.clear()
         request.session["user_id"] = user.id
     return redirect("/movies")
@@ -268,14 +528,19 @@ def favorites(request: Request):
     with SessionLocal() as database:
         user = get_user(request, database)
         if not user:
-            return redirect("/login")
+            return require_login(request)
         movies = database.scalars(
             select(Movie)
             .join(Favorite)
             .where(Favorite.user_id == user.id)
             .order_by(Favorite.created_at.desc())
         ).all()
-        return render(request, "favorites.html", user=user, movies=movies)
+        ratings = [movie.rating for movie in movies]
+        return render(
+            request, "favorites.html", user=user, movies=movies,
+            average_rating=sum(ratings) / len(ratings) if ratings else 0,
+            highest_rating=max(ratings) if ratings else 0,
+        )
 
 
 @app.post("/movies/{movie_id}/favorite")
@@ -284,7 +549,7 @@ def toggle_favorite(request: Request, movie_id: int, csrf: str = Form(...)):
     with SessionLocal() as database:
         user = get_user(request, database)
         if not user:
-            return redirect("/login")
+            return require_login(request)
         if not database.get(Movie, movie_id):
             raise HTTPException(status_code=404)
         existing = database.scalar(
@@ -295,10 +560,15 @@ def toggle_favorite(request: Request, movie_id: int, csrf: str = Form(...)):
         if existing:
             database.delete(existing)
             message = "已取消收藏。"
+            database.commit()
         else:
             database.add(Favorite(user_id=user.id, movie_id=movie_id))
             message = "已加入我的收藏。"
-        database.commit()
+            try:
+                database.commit()
+            except IntegrityError:
+                # 双击/多标签并发：另一请求已插入同一条，视为已收藏
+                database.rollback()
     flash(request, message)
     return redirect(f"/movies/{movie_id}")
 
@@ -315,12 +585,17 @@ def save_watch_link(
     with SessionLocal() as database:
         user = get_user(request, database)
         if not is_admin(user):
-            raise HTTPException(status_code=403, detail="仅管理员可以维护正版链接。")
-        if platform_name not in PLATFORMS:
-            raise HTTPException(status_code=422, detail="请选择有效平台。")
+            flash(request, "仅管理员可以维护正版链接。", "error")
+            return redirect(safe_referer_path(request))
+        if not database.get(Movie, movie_id):
+            raise HTTPException(status_code=404)
         watch_url = watch_url.strip()
+        if platform_name not in PLATFORMS:
+            flash(request, "请选择有效平台。", "error")
+            return redirect(f"/movies/{movie_id}")
         if not watch_url.startswith("https://") or len(watch_url) > 1000:
-            raise HTTPException(status_code=422, detail="请输入有效的 HTTPS 正版链接。")
+            flash(request, "请输入有效的 HTTPS 正版链接。", "error")
+            return redirect(f"/movies/{movie_id}")
         existing = database.scalar(
             select(WatchLink).where(
                 WatchLink.movie_id == movie_id,
@@ -354,7 +629,6 @@ def delete_watch_link(request: Request, link_id: int, csrf: str = Form(...)):
     return redirect(f"/movies/{movie_id}")
 
 
-@app.exception_handler(404)
-def not_found(request: Request, _exc):
-    with SessionLocal() as database:
-        return render(request, "404.html", user=get_user(request, database), status_code=404)
+from web_api import router as api_router  # noqa: E402
+
+app.include_router(api_router)

@@ -1,8 +1,11 @@
+import logging
 import csv
 
 from db import connect_to_database
 from init_database import initialize_database
 from paths import CLEAN_DATA_FILE
+
+logger = logging.getLogger(__name__)
 
 
 def load_movies() -> tuple[int, int]:
@@ -21,6 +24,7 @@ def load_movies() -> tuple[int, int]:
             float(row["rating"]),
             int(row["rating_count"]),
             row["introduction"],
+            row.get("introduction_source", "unknown"),
             row["source_url"],
             row["collected_at"],
         )
@@ -37,14 +41,15 @@ def load_movies() -> tuple[int, int]:
             """
             INSERT INTO movies (
                 douban_id, title, rating, rating_count,
-                introduction, source_url, collected_at
+                introduction, introduction_source, source_url, collected_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(douban_id) DO UPDATE SET
                 title = excluded.title,
                 rating = excluded.rating,
                 rating_count = excluded.rating_count,
                 introduction = excluded.introduction,
+                introduction_source = excluded.introduction_source,
                 source_url = excluded.source_url,
                 collected_at = excluded.collected_at
             """,
@@ -60,10 +65,13 @@ def load_movies() -> tuple[int, int]:
 
     updated_count = sum(1 for row in rows if int(row["douban_id"]) in existing_ids)
     inserted_count = len(rows) - updated_count
-    print(f"新增电影：{inserted_count} 条")
-    print(f"更新已有电影：{updated_count} 条")
+    logger.info(f"新增电影：{inserted_count} 条")
+    logger.info(f"更新已有电影：{updated_count} 条")
     return inserted_count, updated_count
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     load_movies()

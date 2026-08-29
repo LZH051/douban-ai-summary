@@ -1,3 +1,21 @@
 {% extends "base.html" %}
-{% block title %}免费注册｜光影智选{% endblock %}
-{% block content %}<section class="auth-wrap"><div class="auth-card"><p class="eyebrow">创建账户</p><h1>建立你的电影收藏夹</h1><p>注册后可以在不同设备保存自己喜欢的电影。</p>{% if errors %}<div class="error-list">{% for error in errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}<form method="post"><input type="hidden" name="csrf" value="{{ csrf_token }}"><label>用户名<input name="username" value="{{ form.username if form else '' }}" minlength="2" maxlength="50" required></label><label>邮箱<input type="email" name="email" value="{{ form.email if form else '' }}" required></label><label>密码<input type="password" name="password" minlength="8" required></label><label>确认密码<input type="password" name="password_confirm" minlength="8" required></label><button class="button full" type="submit">创建账户</button></form><p class="auth-foot">已有账户？<a href="/login">直接登录</a></p></div></section>{% endblock %}
+{% block title %}注册｜光影智选{% endblock %}
+{% block content %}
+<section class="auth-wrap">
+    <div class="auth-card">
+        <p class="eyebrow">建立个人片单</p>
+        <h1>创建账户</h1>
+        <p>注册后即可收藏电影、管理个人片单。</p>
+        {% if errors %}<div class="error-list" role="alert">{% for error in errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+        <form method="post">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <label>用户名<input name="username" required minlength="2" maxlength="50" autocomplete="nickname" value="{{ form.username if form else '' }}"></label>
+            <label>邮箱<input type="email" name="email" required maxlength="255" autocomplete="email" value="{{ form.email if form else '' }}"></label>
+            <label>密码<input type="password" name="password" required minlength="8" maxlength="128" autocomplete="new-password"><small>至少8个字符</small></label>
+            <label>确认密码<input type="password" name="password_confirm" required minlength="8" maxlength="128" autocomplete="new-password"></label>
+            <button class="button full" type="submit">创建账户</button>
+        </form>
+        <p class="auth-foot">已有账户？<a href="/login">立即登录</a></p>
+    </div>
+</section>
+{% endblock %}

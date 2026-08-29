@@ -1,3 +1,4 @@
+import logging
 import csv
 import random
 import re
@@ -9,11 +10,13 @@ from bs4 import BeautifulSoup
 
 from paths import RAW_DATA_FILE, SCRAPING_ERROR_FILE, ensure_directories
 
+logger = logging.getLogger(__name__)
+
 
 TOP250_URL = "https://movie.douban.com/top250"
 FIELDNAMES = [
     "douban_id", "title", "rating", "rating_count",
-    "introduction", "source_url", "collected_at",
+    "introduction", "introduction_source", "source_url", "collected_at",
 ]
 ERROR_FIELDNAMES = ["page_start", "source_url", "reason", "collected_at"]
 HEADERS = {
@@ -44,7 +47,8 @@ def parse_page(
         source_url = link.get("href", "").strip() if link else ""
         title_node = item.select_one("div.hd span.title")
         rating_node = item.select_one("span.rating_num")
-        intro_node = item.select_one("span.inq")
+        # 豆瓣 2026 年改版后短评在 p.quote > span；保留 span.inq 兼容旧结构
+        intro_node = item.select_one("p.quote span") or item.select_one("span.inq")
         metadata_node = item.select_one("div.bd > p")
 
         if not link or not title_node or not rating_node:
@@ -69,12 +73,17 @@ def parse_page(
                 })
             continue
 
+        # 降级不等于成功：introduction 的三条来源路径必须显性标注，
+        # 否则"短评一条都没抓到"这类问题会被质量报告掩盖（P0-2）
         if intro_node:
             introduction = normalize_text(intro_node.get_text(" ", strip=True))
+            introduction_source = "inq"
         elif metadata_node:
             introduction = normalize_text(metadata_node.get_text(" ", strip=True))
+            introduction_source = "metadata"
         else:
             introduction = "暂无简介"
+            introduction_source = "placeholder"
 
         rows.append({
             "douban_id": id_match.group(1),
@@ -82,6 +91,7 @@ def parse_page(
             "rating": normalize_text(rating_node.get_text()),
             "rating_count": count_match.group(1),
             "introduction": introduction,
+            "introduction_source": introduction_source,
             "source_url": source_url,
             "collected_at": collected_at,
         })
@@ -130,10 +140,10 @@ def scrape_top250(
     for page_index in range(pages):
         if page_index:
             delay = random.uniform(delay_min, delay_max)
-            print(f"等待 {delay:.1f} 秒后请求下一页……")
+            logger.info(f"等待 {delay:.1f} 秒后请求下一页……")
             time.sleep(delay)
         start = page_index * 25
-        print(f"采集第 {page_index + 1}/{pages} 页：start={start}")
+        logger.info(f"采集第 {page_index + 1}/{pages} 页：start={start}")
         html = fetch_page(session, start)
         page_rows = parse_page(html, page_start=start, errors=errors)
         if not page_rows:
@@ -141,7 +151,7 @@ def scrape_top250(
             raise RuntimeError(
                 "页面请求成功，但没有解析到电影数据，可能是页面结构已变化。"
             )
-        print(f"本页解析到 {len(page_rows)} 条")
+        logger.info(f"本页解析到 {len(page_rows)} 条")
         all_rows.extend(page_rows)
 
     with RAW_DATA_FILE.open("w", newline="", encoding="utf-8-sig") as file:
@@ -149,11 +159,14 @@ def scrape_top250(
         writer.writeheader()
         writer.writerows(all_rows)
     write_scraping_errors(errors)
-    print(f"原始数据已保存：{RAW_DATA_FILE}")
-    print(f"解析异常已保存：{SCRAPING_ERROR_FILE}（{len(errors)} 条）")
-    print(f"共采集 {len(all_rows)} 条电影数据")
+    logger.info(f"原始数据已保存：{RAW_DATA_FILE}")
+    logger.info(f"解析异常已保存：{SCRAPING_ERROR_FILE}（{len(errors)} 条）")
+    logger.info(f"共采集 {len(all_rows)} 条电影数据")
     return all_rows
 
 
 if __name__ == "__main__":
+    from logging_setup import configure_logging
+
+    configure_logging()
     scrape_top250()

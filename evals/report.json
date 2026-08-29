@@ -1,0 +1,229 @@
+{
+  "total_cases": 10,
+  "evaluated": 5,
+  "passed": 5,
+  "pass_rate": 1.0,
+  "missing": 5,
+  "details": [
+    {
+      "douban_id": 1292052,
+      "title": "肖申克的救赎",
+      "status": "pass",
+      "engine": "handwritten:doubao-seed-2-0-lite-260428",
+      "output": "《肖申克的救赎》是1994年出品的美国犯罪剧情片，由弗兰克·德拉邦特执导，蒂姆·罗宾斯等担任主演。",
+      "checks": [
+        {
+          "rule": "非空",
+          "ok": true,
+          "detail": "49字"
+        },
+        {
+          "rule": "长度≤80字",
+          "ok": true,
+          "detail": "49字"
+        },
+        {
+          "rule": "包含片名",
+          "ok": true,
+          "detail": "肖申克的救赎"
+        },
+        {
+          "rule": "不复述评分",
+          "ok": true,
+          "detail": "9.7"
+        },
+        {
+          "rule": "不复述评价人数",
+          "ok": true,
+          "detail": "3324390"
+        },
+        {
+          "rule": "无臆测词",
+          "ok": true,
+          "detail": "-"
+        }
+      ]
+    },
+    {
+      "douban_id": 1291546,
+      "title": "霸王别姬",
+      "status": "pass",
+      "engine": "handwritten:doubao-seed-2-0-lite-260428",
+      "output": "《霸王别姬》由陈凯歌执导，张国荣、张丰毅等主演，是1993年中国大陆与中国香港合拍的剧情、爱情、同性题材影片。",
+      "checks": [
+        {
+          "rule": "非空",
+          "ok": true,
+          "detail": "55字"
+        },
+        {
+          "rule": "长度≤80字",
+          "ok": true,
+          "detail": "55字"
+        },
+        {
+          "rule": "包含片名",
+          "ok": true,
+          "detail": "霸王别姬"
+        },
+        {
+          "rule": "不复述评分",
+          "ok": true,
+          "detail": "9.6"
+        },
+        {
+          "rule": "不复述评价人数",
+          "ok": true,
+          "detail": "2449873"
+        },
+        {
+          "rule": "无臆测词",
+          "ok": true,
+          "detail": "-"
+        }
+      ]
+    },
+    {
+      "douban_id": 1296141,
+      "title": "控方证人",
+      "status": "pass",
+      "engine": "handwritten:doubao-seed-2-0-lite-260428",
+      "output": "《控方证人》由比利·怀尔德执导，泰隆·鲍华等主演，是1957年出品的美国影片，类型涵盖剧情、犯罪、悬疑、惊悚。",
+      "checks": [
+        {
+          "rule": "非空",
+          "ok": true,
+          "detail": "55字"
+        },
+        {
+          "rule": "长度≤80字",
+          "ok": true,
+          "detail": "55字"
+        },
+        {
+          "rule": "包含片名",
+          "ok": true,
+          "detail": "控方证人"
+        },
+        {
+          "rule": "不复述评分",
+          "ok": true,
+          "detail": "9.6"
+        },
+        {
+          "rule": "不复述评价人数",
+          "ok": true,
+          "detail": "759686"
+        },
+        {
+          "rule": "无臆测词",
+          "ok": true,
+          "detail": "-"
+        }
+      ]
+    },
+    {
+      "douban_id": 1292722,
+      "title": "泰坦尼克号",
+      "status": "pass",
+      "engine": "handwritten:doubao-seed-2-0-lite-260428",
+      "output": "《泰坦尼克号》由詹姆斯·卡梅隆执导，莱昂纳多·迪卡普里奥等主演，1997年于美国上映，属于剧情、爱情、灾难类影片。",
+      "checks": [
+        {
+          "rule": "非空",
+          "ok": true,
+          "detail": "57字"
+        },
+        {
+          "rule": "长度≤80字",
+          "ok": true,
+          "detail": "57字"
+        },
+        {
+          "rule": "包含片名",
+          "ok": true,
+          "detail": "泰坦尼克号"
+        },
+        {
+          "rule": "不复述评分",
+          "ok": true,
+          "detail": "9.5"
+        },
+        {
+          "rule": "不复述评价人数",
+          "ok": true,
+          "detail": "2527111"
+        },
+        {
+          "rule": "无臆测词",
+          "ok": true,
+          "detail": "-"
+        }
+      ]
+    },
+    {
+      "douban_id": 1292720,
+      "title": "阿甘正传",
+      "status": "pass",
+      "engine": "handwritten:doubao-seed-2-0-lite-260428",
+      "output": "《阿甘正传》由罗伯特·泽米吉斯执导，汤姆·汉克斯等主演，1994年于美国出品，是一部剧情、爱情题材的影片。",
+      "checks": [
+        {
+          "rule": "非空",
+          "ok": true,
+          "detail": "53字"
+        },
+        {
+          "rule": "长度≤80字",
+          "ok": true,
+          "detail": "53字"
+        },
+        {
+          "rule": "包含片名",
+          "ok": true,
+          "detail": "阿甘正传"
+        },
+        {
+          "rule": "不复述评分",
+          "ok": true,
+          "detail": "9.5"
+        },
+        {
+          "rule": "不复述评价人数",
+          "ok": true,
+          "detail": "2454680"
+        },
+        {
+          "rule": "无臆测词",
+          "ok": true,
+          "detail": "-"
+        }
+      ]
+    },
+    {
+      "douban_id": 1291561,
+      "title": "千与千寻",
+      "status": "missing"
+    },
+    {
+      "douban_id": 1292063,
+      "title": "美丽人生",
+      "status": "missing"
+    },
+    {
+      "douban_id": 1295644,
+      "title": "这个杀手不太冷",
+      "status": "missing"
+    },
+    {
+      "douban_id": 3541415,
+      "title": "盗梦空间",
+      "status": "missing"
+    },
+    {
+      "douban_id": 1292001,
+      "title": "海上钢琴师",
+      "status": "missing"
+    }
+  ]
+}

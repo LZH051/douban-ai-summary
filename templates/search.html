@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import movie_card %}
+{% block title %}语义找片｜光影智选{% endblock %}
+{% block content %}
+<section class="page-width page-head"><p class="eyebrow">语义检索</p><h1>语义找片</h1><p>用一句话描述想看的电影，比如"讲越狱的高分片"。</p></section>
+<section class="page-width search-panel">
+    <form method="get" action="/search" role="search">
+        <label>描述你想看的电影<input type="search" name="q" value="{{ q }}" placeholder="例如：讲越狱的高分片" enterkeyhint="search"></label>
+        <button class="button" type="submit">语义搜索</button>
+    </form>
+</section>
+<section class="page-width section">
+    {% if state == "no_index" %}
+    <div class="empty"><h2>语义索引尚未构建</h2><p>在服务器上运行 <code>python src/build_index.py</code> 构建索引后即可使用。</p></div>
+    {% elif state == "no_embedder_config" %}
+    <div class="empty"><h2>缺少 embedding 配置</h2><p>索引使用 API embedding 构建，需要配置 AI_API_KEY、AI_BASE_URL 和 AI_EMBEDDING_MODEL。</p></div>
+    {% elif state == "search_error" %}
+    <div class="empty"><h2>检索暂时不可用</h2><p>请稍后再试。</p></div>
+    {% elif q and results %}
+    <div class="result-line">与「{{ q }}」最相关的 {{ results|length }} 部：</div>
+    <div class="movie-grid">
+        {% for movie, score in results %}{{ movie_card(movie) }}{% endfor %}
+    </div>
+    {% if embedder_signature == "hashing-bigram-v1" %}
+    <p class="muted" style="margin-top:16px">当前为零费用的字面匹配索引（无语义理解）。配置 embedding 接口并重建索引后，检索质量会明显提升。</p>
+    {% endif %}
+    {% elif q %}
+    <div class="empty"><h2>没有找到相关电影</h2><p>换个说法试试。</p></div>
+    {% else %}
+    <div class="empty compact"><p>输入一句描述开始语义检索。试试：「监狱里的希望」「小丑爱上舞女」「二战集中营里的父亲」</p></div>
+    {% endif %}
+</section>
+{% endblock %}
