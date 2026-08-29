@@ -331,11 +331,26 @@ def movie_list(request: Request, q: str = "", min_rating: str = "", page: str = 
         ).all()
         first_page_number = max(1, page - 2)
         last_page_number = min(total_pages, page + 2)
+
+        # 评分分布直方图（0.5 分一档）：在 Python 端分桶，
+        # 避免 SQL 层的 floor/round 方言差异
+        ratings = database.scalars(
+            select(Movie.rating).where(*conditions)
+        ).all()
+        buckets: dict[float, int] = {}
+        for rating in ratings:
+            bucket = int(rating * 2) / 2
+            buckets[bucket] = buckets.get(bucket, 0) + 1
+        rating_histogram = [
+            {"bucket": f"{bucket:.1f}", "count": buckets[bucket]}
+            for bucket in sorted(buckets)
+        ]
         return render(
             request, "movies.html", user=user, movies=movies,
             q=q, min_rating=min_rating, page=page, total=total,
-            total_pages=total_pages,
+            total_pages=total_pages, per_page=MOVIES_PER_PAGE,
             page_numbers=range(first_page_number, last_page_number + 1),
+            rating_histogram=rating_histogram,
         )
 
 
@@ -429,7 +444,8 @@ def login(
         if too_many_login_failures(database, email):
             return render(
                 request, "login.html",
-                error="尝试次数过多，请约 15 分钟后再试。", status_code=429,
+                errors=["尝试次数过多，请约 15 分钟后再试。"],
+                form={"email": email}, status_code=429,
             )
         user = database.scalar(select(WebUser).where(WebUser.email == email))
         # 邮箱不存在时也执行一次哈希校验，消除时序枚举通道
@@ -437,7 +453,8 @@ def login(
         if not user or not verify_password(password, stored_hash):
             record_login_failure(database, email)
             return render(
-                request, "login.html", error="邮箱或密码不正确。", status_code=401
+                request, "login.html", errors=["邮箱或密码不正确。"],
+                form={"email": email}, status_code=401,
             )
         clear_login_failures(database, email)
         request.session.clear()
@@ -464,7 +481,12 @@ def favorites(request: Request):
             .where(Favorite.user_id == user.id)
             .order_by(Favorite.created_at.desc())
         ).all()
-        return render(request, "favorites.html", user=user, movies=movies)
+        ratings = [movie.rating for movie in movies]
+        return render(
+            request, "favorites.html", user=user, movies=movies,
+            average_rating=sum(ratings) / len(ratings) if ratings else 0,
+            highest_rating=max(ratings) if ratings else 0,
+        )
 
 
 @app.post("/movies/{movie_id}/favorite")

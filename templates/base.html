@@ -2,15 +2,20 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="description" content="电影信息、AI摘要、个人收藏与正版观看入口">
+    <meta name="theme-color" content="#ffc928">
     <title>{% block title %}光影智选{% endblock %}</title>
-    <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}?v=20260824-4">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23ffc928'/%3E%3Ctext x='50' y='70' font-size='54' text-anchor='middle' fill='%2317140d' font-family='sans-serif'%3E影%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}?v=20260829-1">
+    <script defer src="{{ request.url_for('static', path='app.js') }}?v=20260829-1"></script>
 </head>
 <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
     <header class="site-header">
-        <a class="brand" href="/"><span class="brand-mark">影</span>光影智选</a>
-        <nav>
+        <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">影</span>光影智选</a>
+        <button class="nav-toggle" type="button" aria-label="打开导航" aria-expanded="false" aria-controls="main-nav">☰</button>
+        <nav id="main-nav" aria-label="主导航">
             <a href="/movies">电影库</a>
             {% if current_user %}
                 <a href="/favorites">我的收藏</a>
@@ -26,11 +31,12 @@
         </nav>
     </header>
     {% if messages %}
-    <section class="flash-stack">
+    <section class="flash-stack" role="status" aria-live="polite">
         {% for message in messages %}<div class="flash {{ message.kind }}">{{ message.text }}</div>{% endfor %}
     </section>
     {% endif %}
-    <main>{% block content %}{% endblock %}</main>
+    <main id="main">{% block content %}{% endblock %}</main>
     <footer><strong>光影智选</strong><span>只提供电影信息与正版平台跳转，不存储电影视频。</span></footer>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

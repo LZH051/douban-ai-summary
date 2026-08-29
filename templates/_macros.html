@@ -1,0 +1,13 @@
+{# 电影卡片：三处列表页共用，消除手抄副本与不一致的截断长度 #}
+{% macro movie_card(movie, intro_length=72, show_meta=true) %}
+<article class="movie-card">
+    <div class="movie-cover" aria-hidden="true"><span>{{ movie.title[:1] }}</span><b>{{ "%.1f"|format(movie.rating) }}</b></div>
+    <div class="movie-card-body">
+        <h3><a href="/movies/{{ movie.movie_id }}">{{ movie.title }}</a></h3>
+        <p>{{ movie.introduction[:intro_length] }}{% if movie.introduction|length > intro_length %}…{% endif %}</p>
+        {% if show_meta %}
+        <div class="meta"><span>★ {{ "%.1f"|format(movie.rating) }}</span><span>{{ movie.rating_count }} 人评价</span><span>{{ "AI 摘要" if movie.ai_summary else "基础资料" }}</span></div>
+        {% endif %}
+    </div>
+</article>
+{% endmacro %}
