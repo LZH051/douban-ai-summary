@@ -28,6 +28,28 @@ AI 摘要保存在数据库中，普通用户浏览时不会重复调用 AI 接�
 - 收藏或取消收藏电影
 - 跳转到爱奇艺、腾讯视频、优酷和哔哩哔哩搜索电影
 - 管理员维护确定的正版播放页面链接
+- 电影库页有当前筛选范围的评分分布直方图（本地自托管 Chart.js，无 CDN）
+- 收藏页显示个人统计（收藏数、平均分、最高分）
+- 手机（H5）与电脑浏览器均已适配：移动端抽屉导航、单列卡片、精简分页
+
+### JSON API（/api/v1）
+
+错误统一封装为 `{"error": {"code", "message"}}`：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/movies` | 搜索/评分筛选/分页（`q`/`min_rating`/`page`/`page_size`≤100） |
+| GET | `/api/v1/movies/{id}` | 详情，含 AI 摘要与正版链接 |
+| GET | `/api/v1/favorites` | 我的收藏（需登录会话） |
+| POST | `/api/v1/movies/{id}/favorite` | 收藏切换（需登录会话） |
+
+`/health` 会真实探测数据库，异常时返回 503。交互式文档见 `/docs`。
+
+### 安全
+
+- 登录失败限流（同一邮箱 15 分钟 5 次）；登录校验做了等时处理防邮箱枚举
+- 响应头含 CSP、线上 HSTS；收藏页 Cache-Control: no-store
+- 线上环境缺少 `SESSION_SECRET` 或 `DATABASE_URL` 会拒绝启动，不再静默降级
 
 ### 数据处理工具
 
@@ -177,6 +199,9 @@ ADMIN_EMAILS=管理员注册邮箱（可选）
 .\.venv\Scripts\python.exe tests\ai_robustness_test.py
 .\.venv\Scripts\python.exe tests\import_web_data_test.py
 .\.venv\Scripts\python.exe tests\logging_setup_test.py
+.\.venv\Scripts\python.exe tests\web_p0_fixes_test.py
+.\.venv\Scripts\python.exe tests\api_v1_test.py
+.\.venv\Scripts\python.exe tests\security_hardening_test.py
 ```
 
 预期输出：
